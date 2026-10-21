@@ -82,4 +82,17 @@ The root-level `npm start` command runs the earlier standalone browser prototype
 
 The package keeps its original internal plugin and tool identifiers for compatibility; the public display name is **MarkAtlas**.
 
+## Package a desktop build
+
+On an Apple Silicon Mac with the development dependencies and Swift tools installed, run:
+
+```sh
+python3 plugin/desktop-pdf.py --fetch-sources
+npm run pack:desktop --prefix plugin
+```
+
+This creates `releases/markatlas-VERSION-macos-arm64.zip` and its SHA-256 checksum. It bundles Node, the server's JavaScript dependencies, the viewer, native chooser, Poppler executables and libraries, matching PDF component sources/build recipes, and third-party notices, then extracts the ZIP and checks MCP startup, tool discovery, viewer loading, file reads/saves, PDF text extraction, and SVG/PNG rendering. Recipients do not need npm or a build step. They must install it using their host's supported local plugin flow; extracting a ZIP does not install a plugin.
+
+This package supports macOS arm64 only. Poppler is included in this desktop build; explanations need host sampling or a signed-in Codex CLI. It is a development/distribution build, not a completed public submission. Publisher verification and local-MCP submission access, listing URLs, PNG icons, review materials, and portal checks are still required. When changing the bundled Node version, include that version's official license under `plugin/licenses/node-vVERSION.txt` before packaging.
+
 When connecting a workspace, MarkAtlas automatically opens a README directly inside its root. Matching ignores case and prefers README.md, README.markdown, README, README.txt, then README.rst. A folder without a root README keeps the empty file prompt; nested READMEs are not chosen automatically. Routine tree refreshes preserve the current file.

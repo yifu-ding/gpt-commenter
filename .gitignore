@@ -228,3 +228,4 @@ plugin/node_modules/
 # macOS metadata and generated release archives
 .DS_Store
 /releases/
+/submission/tmp/

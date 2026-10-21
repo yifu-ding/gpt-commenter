@@ -22,8 +22,8 @@ const html = template.replace('/* VIEWER_SCRIPT */', () => script);
 const manifest = JSON.parse(readFileSync(new URL('../plugin.json',here),'utf8'));
 const brand = manifest.extensions['com.openai'].interface;
 const icons = [[brand.composerIcon,null],[brand.logo,'light'],[brand.logoDark,'dark']].map(([path,theme])=>({
-  src:'data:image/svg+xml;base64,'+readFileSync(new URL(`../${path}`,here)).toString('base64'),
-  mimeType:'image/svg+xml',sizes:['any'],...(theme?{theme}:{})
+  src:`data:${path.endsWith('.png')?'image/png':'image/svg+xml'};base64,`+readFileSync(new URL(`../${path}`,here)).toString('base64'),
+  mimeType:path.endsWith('.png')?'image/png':'image/svg+xml',sizes:[path.endsWith('.png')?'512x512':'any'],...(theme?{theme}:{})
 }));
 const server = new McpServer({name: 'gpt-commenter-markdown-demo', title:brand.displayName, version:manifest.version, icons});
 registerAppResource(server, brand.displayName, UI_URI, {title:brand.displayName,icons}, async () => ({
@@ -35,7 +35,7 @@ registerAppTool(server, 'open_markdown_viewer', {
   icons,
   description: 'Open Markdown, code, or a compiled LaTeX PDF for selection and source-linked review comments.',
   inputSchema: {file: z.object({name: z.string().min(1), resourceUri: z.string().min(1)}).optional()},
-  annotations: {title:brand.displayName,readOnlyHint: true, destructiveHint: false, openWorldHint: false},
+  annotations:{title:brand.displayName,readOnlyHint: true, destructiveHint: false, openWorldHint: false},
   _meta: {
     ui: {resourceUri: UI_URI, visibility: ['app']},
     'openai/ui': {entrypoints: [
@@ -53,6 +53,7 @@ registerAppTool(server, 'show_markdown_comment_demo', {
   icons,
   description: 'Open MarkAtlas to read, understand, comment, and edit files with your AI assistant.',
   inputSchema: {},
+  annotations: {readOnlyHint:true,destructiveHint:false,openWorldHint:false},
   outputSchema: {status: z.string()},
   _meta: {ui: {resourceUri: UI_URI}}
 }, async () => ({
@@ -84,10 +85,10 @@ registerAppTool(server,'resolve_native_office_file',{
   inputSchema:{root:z.string(),path:z.string()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
 },async({root,path})=>({content:[],structuredContent:await workspace.nativeOfficePath(root,path)}));
 const pdfArgs={root:z.string(),path:z.string()};
-registerAppTool(server,'read_latex_pdf',{description:'Read a PDF and its extracted text and page coordinates, with optional LaTeX source discovery.',inputSchema:{...pdfArgs,ifNoneMatch:z.string().optional()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true}},async({root,path,ifNoneMatch})=>({content:[],structuredContent:await latex.read(root,path,ifNoneMatch)}));
-registerAppTool(server,'render_latex_pdf_page',{description:'Render one PDF page as scalable vector artwork for the viewer.',inputSchema:{...pdfArgs,page:z.number().int().min(1),fingerprint:z.string().optional(),format:z.enum(['svg','png']).optional()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true}},async({root,path,page,fingerprint,format})=>({content:[],structuredContent:await latex.page(root,path,page,fingerprint,format ?? 'svg')}));
-registerAppTool(server,'locate_latex_pdf_selection',{description:'Locate a PDF selection in its LaTeX source using SyncTeX and quote matching. Unresolved matches must be checked before editing.',inputSchema:{...pdfArgs,selection:z.object({page:z.number().int().min(1),x:z.number(),y:z.number(),startOffset:z.number().int().nonnegative(),quote:z.string().min(1).max(50000),fingerprint:z.string()})},_meta:{ui:{visibility:['app','model']}},annotations:{readOnlyHint:true}},async({root,path,selection})=>({content:[],structuredContent:await latex.locate(root,path,selection)}));
-server.registerTool('read_latex_pdf_page',{description:'Read one page of a connected PDF as text and image when a review needs visual context.',inputSchema:{...pdfArgs,page:z.number().int().min(1)},annotations:{readOnlyHint:true}},async({root,path,page})=>{const data=await latex.read(root,path),p=data.pages[page-1];if(!p)throw Error('Invalid PDF page.');const result=await latex.page(root,path,page,data.fingerprint);return {content:[{type:'text',text:data.text.slice(p.startOffset,p.endOffset)},{type:'image',mimeType:'image/png',data:result.image.split(',')[1]}]};});
+registerAppTool(server,'read_latex_pdf',{description:'Read a PDF and its extracted text and page coordinates, with optional LaTeX source discovery.',inputSchema:{...pdfArgs,ifNoneMatch:z.string().optional()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path,ifNoneMatch})=>({content:[],structuredContent:await latex.read(root,path,ifNoneMatch)}));
+registerAppTool(server,'render_latex_pdf_page',{description:'Render one PDF page as scalable vector artwork for the viewer.',inputSchema:{...pdfArgs,page:z.number().int().min(1),fingerprint:z.string().optional(),format:z.enum(['svg','png']).optional()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path,page,fingerprint,format})=>({content:[],structuredContent:await latex.page(root,path,page,fingerprint,format ?? 'svg')}));
+registerAppTool(server,'locate_latex_pdf_selection',{description:'Locate a PDF selection in its LaTeX source using SyncTeX and quote matching. Unresolved matches must be checked before editing.',inputSchema:{...pdfArgs,selection:z.object({page:z.number().int().min(1),x:z.number(),y:z.number(),startOffset:z.number().int().nonnegative(),quote:z.string().min(1).max(50000),fingerprint:z.string()})},_meta:{ui:{visibility:['app','model']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path,selection})=>({content:[],structuredContent:await latex.locate(root,path,selection)}));
+server.registerTool('read_latex_pdf_page',{description:'Read one page of a connected PDF as text and image when a review needs visual context.',inputSchema:{...pdfArgs,page:z.number().int().min(1)},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path,page})=>{const data=await latex.read(root,path),p=data.pages[page-1];if(!p)throw Error('Invalid PDF page.');const result=await latex.page(root,path,page,data.fingerprint);return {content:[{type:'text',text:data.text.slice(p.startOffset,p.endOffset)},{type:'image',mimeType:'image/png',data:result.image.split(',')[1]}]};});
 const chooseFolder=createFolderPicker();
 registerAppTool(server,'choose_markdown_project_folder',{
   description:'Let the user select a local folder in the native folder chooser, then list file names without uploading contents.',inputSchema:{},
@@ -135,10 +136,10 @@ const explanations = explanationStore();
 const explanationPreferences=explanationSettings();
 server.server.registerCapabilities({experimental:{'openai/settings':{readTool:'markatlas_settings_read',updateTool:'markatlas_settings_update'}}});
 server.registerTool('markatlas_settings_read',{
-  title:'MarkAtlas settings',inputSchema:{},annotations:{readOnlyHint:true}
+  title:'MarkAtlas settings',inputSchema:{},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
 },async()=>({content:[],structuredContent:{schema:settingsSchema,values:await explanationPreferences.read()}}));
 server.registerTool('markatlas_settings_update',{
-  title:'Update MarkAtlas settings',inputSchema:{set:z.object({explanationModel:z.enum(['gpt-6-luna','gpt-6.1-sol','gpt-6-astra']).optional()}).strict()},annotations:{readOnlyHint:false,destructiveHint:false}
+  title:'Update MarkAtlas settings',inputSchema:{set:z.object({explanationModel:z.enum(['gpt-6-luna','gpt-6.1-sol','gpt-6-astra']).optional()}).strict()},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
 },async({set})=>({content:[],structuredContent:{values:await explanationPreferences.update(set)}}));
 registerAppTool(server,'generate_review_explanation',{
   description:'Explain a selection using host sampling or a fresh background Codex conversation, then return the answer to the viewer.',

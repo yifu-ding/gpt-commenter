@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "pack:desktop": "python3 package-desktop.py",
     "build": "esbuild src/viewer.js --bundle --format=iife --outfile=dist/viewer.js && esbuild src/server.js --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js && ./node_modules/node/bin/node build-native.mjs",
     "start": "./node_modules/node/bin/node dist/server.js",
     "test": "./node_modules/node/bin/node test.mjs && ./node_modules/node/bin/node workspace-default.test.mjs && ./node_modules/node/bin/node codex-explanation.test.mjs && ./node_modules/node/bin/node background-explanation.test.mjs && ./node_modules/node/bin/node viewer.test.mjs && ./node_modules/node/bin/node chat.test.mjs && ./node_modules/node/bin/node review-batch.test.mjs && ./node_modules/node/bin/node review-batch-viewer.test.mjs && ./node_modules/node/bin/node project.test.mjs && ./node_modules/node/bin/node file-menu.test.mjs && ./node_modules/node/bin/node workspace.test.mjs && ./node_modules/node/bin/node single-file.test.mjs && ./node_modules/node/bin/node single-file-viewer.test.mjs && ./node_modules/node/bin/node refresh.test.mjs && ./node_modules/node/bin/node folder-picker.test.mjs && ./node_modules/node/bin/node annotation-edits.test.mjs && ./node_modules/node/bin/node review-store.test.mjs && ./node_modules/node/bin/node edit-history.test.mjs && ./node_modules/node/bin/node latex.test.mjs && ./node_modules/node/bin/node pdf-viewer.test.mjs && ./node_modules/node/bin/node word-viewer.test.mjs",

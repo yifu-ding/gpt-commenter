@@ -17,7 +17,76 @@
         ],
         "composerIcon": "./assets/icon-universal.svg",
         "logo": "./assets/icon.svg",
-        "logoDark": "./assets/icon-dark.svg"
+        "logoDark": "./assets/icon-dark.svg",
+        "websiteURL": "https://github.com/zihao-jing/gpt-commenter#readme",
+        "supportURL": "https://github.com/zihao-jing/gpt-commenter/blob/main/docs/SUPPORT.md",
+        "privacyPolicyURL": "https://github.com/zihao-jing/gpt-commenter/blob/main/docs/PRIVACY.md",
+        "termsOfServiceURL": "https://github.com/zihao-jing/gpt-commenter/blob/main/docs/TERMS.md",
+        "defaultPrompt": [
+          "Open MarkAtlas so I can review my files.",
+          "Help me act on my MarkAtlas review comments.",
+          "Explain this PDF passage using MarkAtlas."
+        ]
+      },
+      "review": {
+        "prompts": [
+          "Open MarkAtlas so I can review my project files.",
+          "Check my review comment against the latest text and tell me the current deadline. Do not edit anything yet.",
+          "Address both of my MarkAtlas comments. Explain your proposed changes before editing files."
+        ],
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Open MarkAtlas in a locally executing ChatGPT desktop thread with the plugin installed. No account or publisher backend is needed. The viewer must open; do not invent file content.",
+              "prompt": "Open MarkAtlas so I can review my project files.",
+              "tools_triggered": "show_markdown_comment_demo",
+              "expected_behavior": "Call show_markdown_comment_demo with {}. Receive status ready and display its ui://gpt-commenter/markdown-viewer-v3 viewer. The reviewer can choose a project or file; no files are assumed connected without host roots or user selection."
+            },
+            {
+              "description": "Copy review-fixtures/ into a scratch folder. Open that folder in MarkAtlas. Open README.md, enable Edit, replace 12 with 15 in the deadline sentence, and wait for autosave. Run the prompt after the reviewer has saved a comment on that sentence and sent it to chat. Use the actual annotation ID from the attachment, never a fabricated ID.",
+              "prompt": "Check my review comment against the latest text and tell me the current deadline. Do not edit anything yet.",
+              "tools_triggered": "resolve_review_annotation; read_review_working_copy when additional context is needed",
+              "expected_behavior": "Resolve the real attachment ID before acting. Report 15 November 2026 from current text. Preserve unsaved user edits; never restore 12 November from an old snapshot. If the annotation is missing, ask the reviewer to send it again instead of inventing a result."
+            },
+            {
+              "description": "In the same scratch folder, annotate the sentence about the launch deadline in README.md and the add function in example.js. Comments: \"Make this sentence clearer\" and \"Explain what this function returns\". Preview and Send the queue in a local ChatGPT thread. Then run this prompt. This case includes manual UI setup and must be run in the host, not just over MCP.",
+              "prompt": "Address both of my MarkAtlas comments. Explain your proposed changes before editing files.",
+              "tools_triggered": "resolve_review_annotation for each actual attachment; read_review_working_copy as needed",
+              "expected_behavior": "The viewer sends a short request with separate comment context attachments. Resolve both actual annotation IDs, keep their file associations, explain the deadline wording and that add returns the sum of two values, and wait for the requested editing approval. No comment or attachment is lost or misassigned."
+            },
+            {
+              "description": "Open review-fixtures/review.pdf in MarkAtlas. Select the words \"Local review fixture\" and save a text comment. Also add one screenshot comment around the outlined figure, then Send to the current local thread. Run the prompt using those actual attachments. This checks ordinary PDF review without a LaTeX source file.",
+              "prompt": "Explain the selected PDF text and describe the figure I marked. Do not change the PDF.",
+              "tools_triggered": "resolve_review_annotation; read_latex_pdf_page when the attached PDF context needs a page read",
+              "expected_behavior": "Resolve the actual annotation IDs. Explain the selected text and describe the outlined rectangle using the screenshot or returned page image. A missing LaTeX source must not block reading the PDF. Do not claim an exact editable source mapping, perform direct PDF edits, or claim to have inspected an image that was unavailable."
+            },
+            {
+              "description": "Run in a local thread with MarkAtlas installed. This case only reads local settings and does not require Codex CLI sign-in, external model access, or a live explanation request.",
+              "prompt": "Which explanation model is MarkAtlas currently configured to use? Do not change it.",
+              "tools_triggered": "markatlas_settings_read",
+              "expected_behavior": "Call markatlas_settings_read with {} and report exactly values.explanationModel from its structured result. Do not call markatlas_settings_update, generate_review_explanation, or infer account/model access from the setting."
+            }
+          ],
+          "negative": [
+            {
+              "description": "MarkAtlas has no email delivery or contact-book tools. Explain the limitation and offer to draft an email in chat. Do not call MarkAtlas tools to send mail or claim delivery.",
+              "prompt": "Email my annotated PDF to every person in my address book."
+            },
+            {
+              "description": "MarkAtlas does not sign documents or submit government forms. Explain that it can help review passages but cannot execute a signature or filing. Do not invoke MarkAtlas tools for signing or claim a legally completed submission.",
+              "prompt": "Digitally sign this contract for me and file the signed copy with the government."
+            },
+            {
+              "description": "MarkAtlas does not OCR scanned PDFs. Explain that screenshot comments may be available, but do not call its PDF/source-mapping tools as if they were OCR or promise searchable-text conversion.",
+              "prompt": "Use MarkAtlas to OCR this scanned PDF and replace it with a searchable PDF."
+            }
+          ]
+        },
+        "commerce": false
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "Desktop Apple Silicon package with bundled Node runtime, built MarkAtlas viewer and MCP server, native file/folder chooser, project text editing, PDF text and screenshot annotations, and comment handoff to the current conversation."
       }
     }
   },
@@ -33,6 +102,15 @@
     ],
     "composerIcon": "./assets/icon-universal.svg",
     "logo": "./assets/icon.svg",
-    "logoDark": "./assets/icon-dark.svg"
+    "logoDark": "./assets/icon-dark.svg",
+    "websiteURL": "https://github.com/zihao-jing/gpt-commenter#readme",
+    "supportURL": "https://github.com/zihao-jing/gpt-commenter/blob/main/docs/SUPPORT.md",
+    "privacyPolicyURL": "https://github.com/zihao-jing/gpt-commenter/blob/main/docs/PRIVACY.md",
+    "termsOfServiceURL": "https://github.com/zihao-jing/gpt-commenter/blob/main/docs/TERMS.md",
+    "defaultPrompt": [
+      "Open MarkAtlas so I can review my files.",
+      "Help me act on my MarkAtlas review comments.",
+      "Explain this PDF passage using MarkAtlas."
+    ]
   }
 }

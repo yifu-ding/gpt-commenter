@@ -3,6 +3,8 @@ import {promisify} from 'node:util';
 import {readFile,readdir,stat} from 'node:fs/promises';
 import {join,dirname,basename,relative,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {tmpdir} from 'node:os';
 const execute=promisify(execFile),hash=s=>createHash('sha256').update(s).digest('hex');
 const hidden=new Set(['.git','node_modules','.codex','.agents','.aws','.gpt-commenter-build']);
 const decode=s=>s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi,(_,e)=>e[0]==='#'?String.fromCodePoint(e[1]?.toLowerCase()==='x'?parseInt(e.slice(2),16):Number(e.slice(1))):({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"})[e]);
@@ -25,13 +27,23 @@ export function parsePdfText(xml){
   return {text,pages};
 }
 async function executable(name){
+  if(['pdftotext','pdftocairo','pdftoppm'].includes(name)){
+    const bundled=fileURLToPath(new URL(`../runtime/pdf/bin/${name}`,import.meta.url));
+    try{if((await stat(bundled)).isFile())return bundled;}catch{}
+  }
   for(const path of [...(process.env.PATH || '').split(':'),'/Library/TeX/texbin','/opt/homebrew/bin','/usr/local/bin','/usr/bin']){
     const candidate=join(path,name);try{if((await stat(candidate)).isFile())return candidate;}catch{}
   }
   throw Error(`${name} is not installed. PDF display requires Poppler (pdftotext, pdftocairo and pdftoppm); precise source mapping uses the user's installed SyncTeX.`);
 }
 async function run(name,args,options={}){
-  try{return await execute(await executable(name),args,{timeout:120000,maxBuffer:24*1024*1024,...options});}
+  try{
+    const command=await executable(name),bundled=command===fileURLToPath(new URL(`../runtime/pdf/bin/${name}`,import.meta.url));
+    const pdfRoot=fileURLToPath(new URL('../runtime/pdf/',import.meta.url));
+    return await execute(command,args,{timeout:120000,maxBuffer:24*1024*1024,...(bundled?{
+      cwd:pdfRoot,env:{...process.env,FONTCONFIG_FILE:join(pdfRoot,'fonts.conf'),XDG_CACHE_HOME:join(process.env.PLUGIN_DATA || tmpdir(),'markatlas-pdf-cache')}
+    }:{}),...options});
+  }
   catch(error){throw Error(`${name}: ${(error.stderr || error.stdout || error.message).toString().slice(-8000)}`);}
 }
 export function latexService(workspace){

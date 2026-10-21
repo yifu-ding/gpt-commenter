@@ -56,3 +56,9 @@ See the [plugin guide](plugin/README.md) for requirements, controls, and local d
 
 **MarkAtlas** · Developed by **Zihao Jing**<br>
 Collect comments. Let AI act.
+
+## Support and policies
+
+[Support](docs/SUPPORT.md) · [Privacy](docs/PRIVACY.md) · [Terms](docs/TERMS.md)
+
+The Apple Silicon desktop distribution bundles Node and PDF tools; the source distribution requires building. See the release README for installation and platform requirements.
