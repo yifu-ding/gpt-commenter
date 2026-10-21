@@ -1,0 +1,10 @@
+{
+  "name": "gpt-commenter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Markdown-first review queue prototype for Codex",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/model.test.mjs"
+  }
+}

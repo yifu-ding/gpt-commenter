@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {createEditHistory} from './src/edit-history.js';
+let clock=0;const history=createEditHistory({now:()=>clock});
+history.record('','h',0);clock=500;history.record('h','he',1);clock=1800;history.record('he','hey',2);
+assert.equal(history.restore('hey',3).text,'','nearby typing is one undo step');
+assert.equal(history.restore('',0,true).text,'hey','redo restores the whole burst');
+clock=4000;history.record('hey','hey!',3);clock=6501;history.record('hey!','hey!?',4);
+assert.equal(history.restore('hey!?',5).text,'hey!','a pause starts a new step');
+history.boundary();history.record('hey!','hey',4);clock+=100;history.record('hey','he',3);
+assert.equal(history.restore('he',2).text,'hey!','adjacent backspaces group');
+history.boundary();history.record('hey!','xhey!',0);history.record('xhey!','xhey!?',5);
+assert.equal(history.restore('xhey!?',6).text,'xhey!','moving to another location starts a step');
+history.clear();assert.equal(history.restore('x',1),null);
+console.log('Typing bursts, grouped redo, pauses, deletion bursts, intent boundaries, and history reset passed');

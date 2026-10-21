@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {createFileRefresh} from './src/refresh.js';
+let busy=false,snapshot={text:'original',etag:'1'},applied=[],errors=[],reads=[];
+const timers=new Map();let timerId=0;
+const refresh=createFileRefresh({isBusy:()=>busy,apply:async text=>applied.push(text),onError:error=>errors.push(error.message),
+ schedule:cb=>{timers.set(++timerId,cb);return timerId;},cancel:id=>timers.delete(id)});
+const read=async etag=>{reads.push(etag);return etag===snapshot.etag?{notModified:true,etag}:snapshot;};
+refresh.watch({read,text:'original',etag:'1'});await refresh.check();assert.equal(applied.length,0);
+snapshot={text:'updated',etag:'2'};busy=true;await refresh.check();assert.equal(applied.length,0,'open draft prevents refresh');
+snapshot={text:'latest',etag:'3'};await refresh.check();busy=false;await refresh.check();
+assert.deepEqual(applied,['latest'],'latest pending update applies even after a not-modified response');
+assert.equal(reads.at(-1),'3','conditional checks use latest file version');
+snapshot={text:'latest',etag:'4'};await refresh.check();assert.equal(applied.length,1,'metadata changes alone do not rebuild the document');
+let resolveOld,disposed=false;
+refresh.watch({text:'old',read:()=>new Promise(resolve=>resolveOld=resolve),dispose:()=>{disposed=true;}});
+const old=refresh.check();await refresh.check();
+refresh.watch({text:'new',read:async()=>({text:'new'})});resolveOld({text:'stale'});await old;
+assert.equal(disposed,true);assert.equal(applied.includes('stale'),false,'an old file cannot update the new viewer');
+let unavailable=true;
+refresh.watch({text:'new',read:async()=>{if(unavailable)throw Error('File temporarily missing');return {text:'recovered'};}});
+await refresh.check();await refresh.check();assert.deepEqual(errors,['File temporarily missing'],'repeated errors do not spam the status');
+unavailable=false;await refresh.check();assert.equal(applied.at(-1),'recovered');
+refresh.stop();assert.equal(timers.size,0,'closing a file cancels its timer');
+await refresh.check();assert.equal(applied.at(-1),'recovered');
+console.log('Automatic file refresh, draft preservation, conditional reads, stale-request isolation, and recovery checks passed');

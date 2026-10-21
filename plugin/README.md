@@ -1,0 +1,85 @@
+# MarkAtlas
+
+**Collect comments. Let AI act.**<br>
+Developed by **Zihao Jing**
+
+Read, understand, and edit project files with your AI assistant. MarkAtlas lets you collect comments across Markdown, code, and PDFs, review them together, and send a short request with separate context attachments to the current chat. Each comment keeps its file location; screenshot comments keep the image beside the matching request.
+
+## Open a file or project
+
+Use **Open file…** or the file icon beside the tree filter to select a single PDF, Markdown file, or code file. Files opened through the host's file entry also use this flow. Opening a local file also connects its parent folder and selects the file in that tree. Host file entrypoints use the original local path supplied by the host, even when the resource URI is opaque. Single PDFs use the same continuous viewer, zoom, selections, screenshot comments, explanations, and batch-send flow. Local files are read from their actual paths, so connected text files can autosave and local PDFs can refresh after changes.
+
+Resource attachments and browser-selected files without exposed filesystem paths use a local working copy. Changes to that copy cannot overwrite an inaccessible original file. Host resource refresh is supported where resource reads remain available. Imported resources without an original path keep an isolated one-file tree. Local PDFs can discover neighboring LaTeX source in their connected parent folder.
+
+
+Open MarkAtlas from its global or conversation entry. When the host supplies a workspace folder, its files can appear automatically. Otherwise, use the folder icon to connect a folder through the native chooser. The tree lists files without uploading a directory and loads contents when you open a file.
+
+Use the filter to find files, click folder breadcrumbs to browse, and drag the tree's edge to adjust its width. Right-click a file or folder name for **Copy path** (the full filesystem path) or **Copy relative path** (relative to the connected project root). Full-path copying is unavailable for browser-only folders whose filesystem location is not exposed. Text files keep the tree open; opening a PDF collapses it to give the document more space.
+
+## Comment, then send
+
+With **Request edits** enabled, select a passage and write your comment in the floating panel. **Enter** saves the comment; **Command+Enter** inserts a new line. Selecting text in an editable document keeps focus in the document until you click the comment field.
+
+The bottom bar counts files and annotations. Hover over it or click the count to preview the queue. Click the count again to close the preview. Delete individual comments with their remove controls, or use the floating **Cancel all** button above the preview. Turning Request edits off hides the bar without clearing the queue.
+
+**Send** finishes pending autosaves, validates the remaining comments, and submits a short request immediately. The first context attachment contains shared project paths, file details, and comment-to-file mappings once. Each following attachment contains one numbered comment; screenshots stay beside their matching comments. The same send flow handles single-file and project reviews. Failed sends retain valid queued comments for retry. Successfully sent or deleted annotations are removed from both open files and cached drafts.
+
+If the host has no available chat input, MarkAtlas keeps the annotations queued. Open the chat you want to use and retry **Send**, or choose **Send to new chat**. A failed send never automatically switches chats.
+
+## Supported workflows
+
+- **Markdown:** editable rendered and source views, tables, text selections, and comments.
+- **Code and text:** a CodeMirror editor with highlighting for supported languages, undo/redo, text-size controls, and autosave for connected text files. Other UTF-8 text opens in a plain-text editor.
+- **PDF:** continuous pages, vector page artwork, pointer-centered zoom, page navigation, selectable text where available, and cropped screenshot comments. Ordinary PDFs and source-free LaTeX PDFs can be displayed.
+- **LaTeX:** PDF-to-source mapping through SyncTeX or text matching, source navigation, and automatic preview refresh after an external rebuild. The assistant edits `.tex` files and uses the user's installed build command; the plugin does not compile documents.
+- **Images:** local previews of common image formats.
+- **Office:** project-tree clicks hand off Word and Excel files to the host's native viewer. A read-only DOCX preview remains available for supported document inputs; it does not edit Word formatting or guarantee Word's exact pagination.
+
+The **Edit** toggle switches Markdown and code between editable and read-only modes. Text edits autosave after a short pause. Saves check the disk version and stop on conflicts so external changes are not silently overwritten. Browser-picked files without a writable project connection keep edits as local drafts.
+
+## Explanations
+
+A comment and an explanation can coexist on the same selection. Switching between **Comment** and **Explanation** preserves each saved note, and deleting or sending a comment keeps its explanation. Select **Explanation**, then choose Short, Medium, or Long. The explanation appears inside the selection panel without opening or switching to another chat tab. While the model responds, the box says that this may take a few seconds. Hosts with MCP sampling use that service. Otherwise, the local server starts a fresh, ephemeral conversation through the signed-in Codex CLI, waits for its answer, and displays it in the same box. Both routes receive the full selected passage and any screenshot.
+
+Choose the explanation model in the plugin's host settings. The CLI fallback requires a current Codex CLI installed and signed in, with access to that model. It runs in a temporary directory with a read-only sandbox and without loading user configuration; temporary prompts, screenshots, and replies are cleaned up afterward. Set `MARKATLAS_CODEX_PATH` in the server environment if the executable is outside PATH. Model access or sign-in failures appear in the explanation box.
+
+## Annotations and changing files
+
+Comments track text edits before sending. Deleted passages lose their comments automatically. Screenshot comments tied to an older PDF are removed rather than applied to a different image. Other external file changes require refreshing before the remaining review can be sent.
+
+Version checks and annotation records stay internal. The final AI request uses project-relative paths where possible, current locations, compact excerpts, comments, and matching images. It does not include visible version hashes or annotation IDs. Changes made after sending cannot rewrite chat history; the assistant must verify the quoted passage against the current file before editing.
+
+## Requirements and access
+
+- A compatible desktop host with MCP Apps and native draft message support. Background explanations require MCP sampling or a signed-in Codex CLI.
+- **Node.js 22 or newer** for running the plugin from source.
+- **macOS** for the bundled native folder chooser. Building that helper requires Swift command-line tools.
+- **Poppler** utilities (`pdftotext`, `pdftocairo`, and `pdftoppm`) for PDF review. SyncTeX improves LaTeX source mapping; compiling requires your own LaTeX installation.
+
+Reads and writes are restricted to folders provided by the host, folders explicitly connected by the user, and the parent folders of explicitly opened local files. Imported resources without a local path remain isolated. The tree skips `.git`, `node_modules`, `.codex`, `.agents`, and `.aws`. It lists at most 5,000 files; text reads and saves are limited to 5 MB. PDFs are limited to 50 MB, 300 pages, and 5 MB of extracted text. Scanned PDFs without a text layer do not support text selection; use screenshot comments instead.
+
+Drafts are stored locally when storage is available. Sending review context shares its comments, excerpts, and screenshots with the chat host; explanation requests share their selected content as well. Storage limits, particularly for screenshots, can affect draft recovery after reloads.
+
+## Local development
+
+From the repository root:
+
+```sh
+npm install --prefix plugin
+npm run build --prefix plugin
+npm run preview --prefix plugin -- /path/to/project
+```
+
+Open **http://127.0.0.1:4174/**. The development preview uses the native chooser and project-file access, but chat sending is mocked. A preview Send action does not submit a real model request. Explanation actions use the local Codex CLI and do request a real model response.
+
+Run the plugin checks with:
+
+```sh
+npm test --prefix plugin
+```
+
+The root-level `npm start` command runs the earlier standalone browser prototype on port 4173. Use the plugin preview above for current MarkAtlas development.
+
+The package keeps its original internal plugin and tool identifiers for compatibility; the public display name is **MarkAtlas**.
+
+When connecting a workspace, MarkAtlas automatically opens a README directly inside its root. Matching ignores case and prefers README.md, README.markdown, README, README.txt, then README.rst. A folder without a root README keeps the empty file prompt; nested READMEs are not chosen automatically. Routine tree refreshes preserve the current file.

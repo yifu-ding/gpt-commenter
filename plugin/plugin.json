@@ -1,0 +1,38 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "gpt-commenter-markdown-spike",
+  "version": "0.16.2",
+  "description": "Collect comments across Markdown, code, and PDFs, then send one organized request to your AI assistant.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "MarkAtlas",
+        "shortDescription": "Collect comments. Let AI act.",
+        "longDescription": "MarkAtlas turns file review into clear requests for your AI assistant. Browse your project, read and edit Markdown or code, and review PDFs with text selections and screenshot comments. Collect comments across files, review the queue, then send a short request immediately with each comment as a separate context attachment. Comments follow your edits before sending, and connected text files autosave. For LaTeX projects, map PDF passages to source locations and let your assistant edit and rebuild with your installed toolchain. Background explanations appear in the selection panel through host sampling or a fresh background Codex conversation.\n\nDeveloped by Zihao Jing. Collect comments. Let AI act.",
+        "developerName": "Zihao Jing",
+        "category": "Productivity",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "composerIcon": "./assets/icon-universal.svg",
+        "logo": "./assets/icon.svg",
+        "logoDark": "./assets/icon-dark.svg"
+      }
+    }
+  },
+  "interface": {
+    "displayName": "MarkAtlas",
+    "shortDescription": "Collect comments. Let AI act.",
+    "longDescription": "MarkAtlas turns file review into clear requests for your AI assistant. Browse your project, read and edit Markdown or code, and review PDFs with text selections and screenshot comments. Collect comments across files, review the queue, then send a short request immediately with each comment as a separate context attachment. Comments follow your edits before sending, and connected text files autosave. For LaTeX projects, map PDF passages to source locations and let your assistant edit and rebuild with your installed toolchain. Background explanations appear in the selection panel through host sampling or a fresh background Codex conversation.\n\nDeveloped by Zihao Jing. Collect comments. Let AI act.",
+    "developerName": "Zihao Jing",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "composerIcon": "./assets/icon-universal.svg",
+    "logo": "./assets/icon.svg",
+    "logoDark": "./assets/icon-dark.svg"
+  }
+}

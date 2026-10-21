@@ -1,0 +1,77 @@
+import {EditorView as CMView} from '@codemirror/view';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {webcrypto} from 'node:crypto';
+import {build} from 'esbuild';
+import {JSDOM} from 'jsdom';
+import {renderMarkdown,normalize} from './src/markdown.js';
+import {wordFixture} from './test-fixtures/word.mjs';
+const fixture='# Review\n\nFirst **same** and same with &amp; and \\*literal\\*.\n\nSecond line\ncontinues here.\n\n```js\nconst x = 1;\n```\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1))';
+const dom=new JSDOM(readFileSync(new URL('./src/viewer.html',import.meta.url),'utf8'),{url:'https://viewer.test',runScripts:'outside-only'});
+const {window}=dom;window.setImmediate=setImmediate;window.clearImmediate=clearImmediate;
+Object.defineProperty(window.crypto,'subtle',{value:webcrypto.subtle});window.TextEncoder=TextEncoder;window.TextDecoder=TextDecoder;
+window.scrollTo=()=>{};window.requestAnimationFrame=cb=>setTimeout(()=>cb(Date.now()),1);window.cancelAnimationFrame=clearTimeout;window.Range.prototype.getClientRects=()=>[];window.Range.prototype.getBoundingClientRect=()=>({left:0,right:0,top:0,bottom:0,width:0,height:0});window.workspaceRoot='/current/project';window.workspaceName='Current project';window.projectReads=0;window.projectLists=0;window.projectText='# From project server';window.projectEtag='1';window.contextCalls=[];window.chatCalls=[];window.hostState=undefined;window.allowContext=true;
+const inputSource=readFileSync(new URL('./src/viewer.js',import.meta.url),'utf8')
+.replace("import {App} from '@modelcontextprotocol/ext-apps';",`class App {constructor(info){window.appInfo=info;window.testApp=this;this.listeners={};}addEventListener(n,cb){this.listeners[n]=cb;}async callServerTool({name,arguments:args}){if(name==='prepare_review_batch'){if(window.batchError)throw Error(window.batchError);window.batchPrepare=args;return {structuredContent:{entries:args.entries}};}if(name==='generate_review_explanation'){window.lastExplanation=args;window.explanationRequests=(window.explanationRequests||0)+1;return {structuredContent:{requestId:'11111111-1111-4111-8111-'+String(window.explanationRequests).padStart(12,'0')}};}if(name==='read_markdown_explanation'){if(window.replyError)throw Error(window.replyError);window.lastReplyRequest=args;if(window.replyGate)await window.replyGate;return {structuredContent:window.explanationReply || {status:'pending'}};}if(name==='remove_markdown_explanation')return {structuredContent:{status:'removed'}};if(name==='update_review_document'){window.reviewDocument=args;return {structuredContent:{documentId:'test-document'}};}if(name==='save_review_project_file'){window.lastSave=args;if(window.saveGate)await window.saveGate;if(window.saveConflict)throw Error('The file changed on disk. Save was stopped; your edits are still in the editor.');window.projectText=args.text;window.projectEtag=String(Number(window.projectEtag)+1);return {structuredContent:{text:window.projectText,etag:window.projectEtag}};}if(name==='choose_markdown_project_folder'){window.folderChooserCalls=(window.folderChooserCalls||0)+1;if(window.folderChooserError)throw Error(window.folderChooserError);return {structuredContent:window.folderChooserCancelled?{cancelled:true}:{root:{name:'Chosen folder',children:[{type:'directory',name:'docs',path:'docs',children:[{type:'file',name:'nested.md',path:'docs/nested.md',supported:true}]},{type:'file',name:window.projectFileName || (window.codeProject?'code.js':'live.md'),path:window.projectFileName || (window.codeProject?'code.js':'live.md'),supported:true}]},rootPath:'/chosen/folder'}};}if(name==='resolve_native_office_file'){window.nativeResolve=args;return {structuredContent:{path:args.root+'/'+args.path}};}if(name==='list_markdown_project'){window.projectLists++;window.lastListArgs=args;if(window.noWorkspace && !args.folderPath)throw Error('No workspace provided');if(args.folderPath==='/invalid')throw Error('Folder does not exist');return {structuredContent:{root:{name:window.workspaceName,children:[{type:'directory',name:'docs',path:'docs',children:[{type:'file',name:'nested.md',path:'docs/nested.md',supported:true}]},{type:'file',name:window.projectFileName || (window.codeProject?'code.js':'live.md'),path:window.projectFileName || (window.codeProject?'code.js':'live.md'),supported:true}]},rootPath:args.folderPath || window.workspaceRoot}};}if(name==='read_markdown_project_file'){if(window.projectSnapshot)return {structuredContent:args.ifNoneMatch===window.projectSnapshot.etag ? {notModified:true,etag:window.projectSnapshot.etag} : window.projectSnapshot};window.projectReads++;window.projectRequest=args;return {structuredContent:args.ifNoneMatch===window.projectEtag?{notModified:true,etag:window.projectEtag}:{name:args.path,text:window.projectText,etag:window.projectEtag}};}throw Error('Unknown tool');}async connect(){if(!this.listeners.toolinput)throw Error('missing file input');}getHostContext(){return {theme:'dark'};}}`)
+.replace("import {OpenAIExtensions, OpenAIFileEntrypointInputSchema} from '@openai/mcp-extensions/app';",`class OpenAIExtensions {get files(){return window.nativeFiles;}get resources(){return window.resources;}get message(){if(!window.allowContext)return undefined;return {async send(params){window.chatCalls.push(params);if(window.composerUnavailable)throw Error('MCP error -32601: MCP app messages require an available composer');return window.sendError?{isError:true}:{};}};}get modelContext(){if(!window.allowContext)return undefined;return {getCurrent:()=>window.hostState,async update(params){window.contextCalls.push(params);window.hostState=params.content.length?{...params,updateId:'update'}:null;return {};}};}}const OpenAIFileEntrypointInputSchema={safeParse(a){return {success:!!a?.file,data:a};}};`);
+const bundle=await build({stdin:{contents:inputSource,resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false,platform:'browser'});
+window.eval(bundle.outputFiles[0].text);
+const $=id=>window.document.getElementById(id);
+const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
+async function until(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5));}assert.ok(predicate(),'asynchronous UI update completed');}
+const enter=()=> $('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+const escape=()=>window.document.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+function select(node,a,b){const range=window.document.createRange();range.setStart(node,a);range.setEnd(node,b);const s=window.getSelection();s.removeAllRanges();s.addRange(range);$('document').dispatchEvent(new window.Event('pointerup',{bubbles:true}));}
+// Collect multiple comments, reject a send, retry as one message, then avoid resending on edits.
+while($('review-list').querySelector('.review-remove'))$('review-list').querySelector('.review-remove').click();
+window.resources={async read(){return {contents:[{text:'# Batch\n\nAlpha beta.\n\nGamma delta.'}]};}};
+await window.testApp.listeners.toolinput({arguments:{file:{name:'batch.md',resourceUri:'file:///batch.md'}}});
+if($('document').querySelector('.cm-editor'))$('view-toggle').click();
+window.allowContext=true;
+const beforeBatchCalls=window.chatCalls.length;
+select($('document').querySelectorAll('p')[0].firstChild,0,5);$('message').value='Review alpha';enter();await flush();await flush();
+select($('document').querySelectorAll('p')[1].firstChild,0,5);$('message').value='Review gamma';enter();await flush();await flush();
+assert.equal(window.chatCalls.length,beforeBatchCalls);assert.equal($('review-count').textContent,'1 File, 2 Annotations');
+window.sendError=true;$('review-send').click();await until(()=>$('review-error').textContent.includes('remain queued'));
+assert.equal($('review-count').textContent,'1 File, 2 Annotations');window.sendError=false;
+$('review-send').click();await until(()=>$('review-batch').hidden);
+assert.equal(window.batchPrepare.entries.length,2);assert.equal(window.chatCalls.length,beforeBatchCalls+2,'each Send makes exactly one native message call');
+const batchMessage=window.chatCalls.at(-1).content.map(c=>c.text || '').join('\n');assert.match(batchMessage,/Review alpha/);assert.match(batchMessage,/Review gamma/);
+assert.equal($('document').querySelectorAll('.annotation-icon,mark').length,0,'sending removes current file marks');
+async function loadFile(name,text='# Batch\n\nAlpha beta.\n\nGamma delta.'){
+ window.resources={async read(){return {contents:[{text}]};}};
+ await window.testApp.listeners.toolinput({arguments:{file:{name,resourceUri:`file:///${name}`}}});
+ if($('document').querySelector('.cm-editor'))$('view-toggle').click();
+}
+async function comment(message){select($('document').querySelector('p').firstChild,0,5);$('message').value=message;enter();await flush();await flush();}
+await loadFile('batch.md');assert.equal($('document').querySelectorAll('.annotation-icon,mark').length,0,'sent marks do not return on reopen');
+await comment('Recover missing chat');
+window.composerUnavailable=true;
+const beforeUnavailable=window.chatCalls.length;
+$('review-send').click();await until(()=>$('review-error').textContent.includes('No chat input'));
+assert.equal(window.chatCalls.length,beforeUnavailable+1);
+assert.equal($('review-count').textContent,'1 File, 1 Annotation');
+assert.equal($('review-send-new').hidden,false);
+assert.ok(Object.keys(window.localStorage).some(key=>window.localStorage.getItem(key).includes('Recover missing chat')),'failed sends retain the saved annotation');
+window.composerUnavailable=false;
+$('review-send-new').click();await until(()=>$('review-batch').hidden);
+assert.deepEqual(JSON.parse(JSON.stringify(window.chatCalls.at(-1)._meta['openai/message'])),{target:'new',send:true});
+assert.match($('status').textContent,/new chat/);
+assert.equal($('review-send-new').hidden,true);
+await comment('Delete while closed');const deletedId=window.reviewDocument.annotations[0].id;
+await loadFile('other.md');$('review-list').querySelector('.review-remove').click();
+await loadFile('batch.md');assert.equal($('document').querySelectorAll('.annotation-icon,mark').length,0,'deletion clears marks in closed files');
+assert.ok(!Object.keys(window.localStorage).filter(key=>key.startsWith('markdown-review:')).some(key=>window.localStorage.getItem(key).includes(deletedId)),'deleted IDs are removed from all cached document versions');
+await comment('Cancel first');await loadFile('other.md');await comment('Cancel second');assert.equal($('review-count').textContent,'2 Files, 2 Annotations','count unique files across the queue');$('review-cancel-all').click();
+assert.equal($('document').querySelectorAll('.annotation-icon,mark').length,0);
+await loadFile('batch.md');assert.equal($('document').querySelectorAll('.annotation-icon,mark').length,0,'Cancel all clears closed-file marks');
+await comment('Send first');await loadFile('other.md');await comment('Send second');
+$('review-send').click();await until(()=>$('review-batch').hidden);
+assert.equal($('document').querySelectorAll('.annotation-icon,mark').length,0);
+await loadFile('batch.md');assert.equal($('document').querySelectorAll('.annotation-icon,mark').length,0,'sending clears closed-file marks');
+await comment('Remove with passage');
+$('view-toggle').click();const deletingEditor=CMView.findFromDOM($('document').querySelector('.cm-editor'));
+const deletedStart=deletingEditor.state.doc.toString().indexOf('Alpha');deletingEditor.dispatch({changes:{from:deletedStart,to:deletedStart+5}});await flush();
+assert.equal($('review-batch').hidden,true,'deleting an annotated passage automatically removes its comment');
+assert.equal($('document').querySelectorAll('.annotation-icon').length,0);
+console.log('Viewer batch queue, multi-comment send, rejection recovery, deletion, and closed-file highlight cleanup checks passed');window.close();

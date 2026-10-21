@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {ChangeSet} from '@codemirror/state';
+import {moveAnnotations} from './src/annotation-edits.js';
+const before='first\nhello world\nlast';
+const note={id:'note',startOffset:6,endOffset:11,startLine:2,endLine:2,selectedText:'hello',documentHash:'initial'};
+const move=ChangeSet.of({from:0,insert:'intro\n'},before.length);
+let [moved]=moveAnnotations([note],before,'intro\n'+before,move);
+assert.equal(moved.startLine,3);assert.equal(moved.selectedText,'hello');assert.equal(moved.originalSnapshot.documentHash,'initial');
+const changed=ChangeSet.of({from:8,to:9,insert:'XX'},before.length);
+const edited=moveAnnotations([note],before,'first\nheXXlo world\nlast',changed)[0];assert.equal(edited.anchorStatus,'edited');assert.equal(edited.selectedText,'heXXlo');
+const deleted=moveAnnotations([note],before,'first\n world\nlast',ChangeSet.of({from:6,to:11},before.length))[0];assert.equal(deleted.anchorStatus,'deleted');assert.equal(deleted.startOffset,deleted.endOffset);
+const restored=moveAnnotations([deleted],'first\n world\nlast',before,ChangeSet.of({from:6,insert:'hello'},before.length-5))[0];assert.equal(restored.selectedText,'hello');assert.notEqual(restored.anchorStatus,'deleted');
+const replacement=moveAnnotations([note],before,'first\nnew world\nlast',ChangeSet.of({from:6,to:11,insert:'new'},before.length))[0];assert.equal(replacement.selectedText,'new');assert.equal(replacement.anchorStatus,'edited');
+const firstTyped=moveAnnotations([note],before,'first\nr world\nlast',ChangeSet.of({from:6,to:11,insert:'r'},before.length))[0];
+const nextTyped=moveAnnotations([firstTyped],'first\nr world\nlast','first\nre world\nlast',ChangeSet.of({from:7,insert:'e'},'first\nr world\nlast'.length))[0];assert.equal(nextTyped.selectedText,'re','continued replacement typing stays in the comment anchor');
+console.log('Annotation movement, edited passages, deletion tombstones, and undo restoration checks passed');

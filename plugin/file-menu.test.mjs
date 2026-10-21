@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {createFileMenu} from './src/file-menu.js';
+const dom=new JSDOM(`<nav id="tree"><details data-project-folder="docs"><summary>docs</summary><button data-project-path="docs/my note.md"><span>my note.md</span></button></details></nav><div id="menu" hidden><button data-copy-path="absolute">Copy path</button><button data-copy-path="relative">Copy relative path</button></div><button id="outside">Outside</button>`);
+const {window}=dom;globalThis.window=window;globalThis.document=window.document;Object.defineProperty(globalThis,'navigator',{value:window.navigator,configurable:true});
+const tree=document.getElementById('tree'),menu=document.getElementById('menu'),buttons=menu.querySelectorAll('button'),file=tree.querySelector('[data-project-path]'),folder=tree.querySelector('summary');
+let root='/project/',copied=[],errors=[];
+Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>copied.push(text)},configurable:true});
+menu.getBoundingClientRect=()=>({width:166,height:80});
+createFileMenu({tree,menu,root:()=>root,onError:error=>errors.push(error.message)});
+const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
+function open(target=file){const event=new window.MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:1010,clientY:760});target.dispatchEvent(event);assert.equal(event.defaultPrevented,true);assert.equal(menu.hidden,false);}
+open(file.firstChild);buttons[0].click();await flush();assert.equal(copied.at(-1),'/project/docs/my note.md');assert.equal(menu.hidden,true);assert.equal(document.activeElement,file);
+open();assert.equal(menu.style.left,'850px');assert.equal(menu.style.top,'680px');buttons[1].click();await flush();assert.equal(copied.at(-1),'docs/my note.md');
+open(folder);buttons[0].click();await flush();assert.equal(copied.at(-1),'/project/docs');open(folder);buttons[1].click();await flush();assert.equal(copied.at(-1),'docs');
+open();menu.dispatchEvent(new window.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));assert.equal(document.activeElement,buttons[1]);menu.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert.equal(menu.hidden,true);assert.equal(document.activeElement,file);
+open();document.getElementById('outside').dispatchEvent(new window.Event('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
+root=null;open();assert.equal(buttons[0].disabled,true,'do not invent full paths for browser-only folders');assert.equal(document.activeElement,buttons[1]);buttons[1].click();await flush();assert.equal(copied.at(-1),'docs/my note.md');
+root='/project';navigator.clipboard.writeText=async()=>{throw Error('Clipboard denied');};document.execCommand=command=>{assert.equal(command,'copy');copied.push(document.querySelector('textarea').value);return true;};open();buttons[0].click();await flush();assert.equal(copied.at(-1),'/project/docs/my note.md');assert.equal(document.querySelector('textarea'),null);
+document.execCommand=()=>false;open();buttons[0].click();await flush();assert.match(errors.at(-1),/Clipboard access is unavailable/);assert.equal(menu.hidden,true);
+console.log('File/folder path menu, relative paths, keyboard dismissal, clipboard fallback, and failure checks passed');window.close();

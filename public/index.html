@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>gpt-commenter</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<main>
+  <header><div><h1>gpt-commenter</h1><p>Markdown review queue for Codex</p></div><span class="badge">Prototype</span></header>
+  <section class="card"><h2>1. Open Markdown</h2><p>Choose a local <code>.md</code> file. Its contents stay in this browser until you copy a batch.</p><input id="file" type="file" accept=".md,.markdown,text/markdown,text/plain"><div id="document-info" class="muted"></div></section>
+  <section class="card"><h2>2. Select a passage</h2><p>Select text below, then press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or the button. Source lines are counted from the original file.</p><textarea id="editor" spellcheck="false" readonly placeholder="Open a Markdown file to begin" disabled></textarea><div class="row"><button id="capture" disabled>Use selection</button><span id="selection-info" class="muted"></span></div></section>
+  <section class="card" id="compose" hidden><h2>3. Add a review item</h2><blockquote id="quote"></blockquote><div id="location" class="muted"></div><div class="row"><label><input type="radio" name="kind" value="comment" checked> Add comment</label><label><input type="radio" name="kind" value="explanation"> Ask for explanation</label></div><label id="comment-label">Comment or instruction<textarea id="comment" rows="3" placeholder="What should Codex address?"></textarea></label><label id="detail-label" hidden>Explanation detail<select id="detail"><option value="short">Short</option><option value="medium" selected>Medium</option><option value="long">Long</option></select></label><div class="row"><button id="add">Add to queue</button><button id="cancel" class="secondary">Cancel</button></div></section>
+  <section class="card"><h2>4. Review and hand off</h2><p id="queue-empty" class="muted">No review items yet.</p><ol id="queue"></ol><div class="row"><button id="copy" disabled>Copy batch for Codex</button><span id="status" role="status"></span></div><label>Exact payload preview<textarea id="payload" readonly rows="12"></textarea></label></section>
+</main><script type="module" src="/app.js"></script>
+</body></html>

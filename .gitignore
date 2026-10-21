@@ -218,3 +218,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local MCP plugin dependencies
+plugin/node_modules/
+
+# Local test cases
+/test_case/
+
+# macOS metadata and generated release archives
+.DS_Store
+/releases/

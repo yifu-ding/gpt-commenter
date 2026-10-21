@@ -1,0 +1,10 @@
+{
+  "name": "gpt-commenter-local",
+  "interface": {"displayName": "gpt-commenter local tests"},
+  "plugins": [{
+    "name": "gpt-commenter-markdown-spike",
+    "source": {"source": "local", "path": "./plugin"},
+    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+    "category": "Productivity"
+  }]
+}
