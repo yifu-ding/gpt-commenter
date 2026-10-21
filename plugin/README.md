@@ -1,9 +1,25 @@
 # MarkAtlas
 
+**English** | [简体中文](README.zh-CN.md)
+
 **Collect comments. Let AI act.**<br>
 Developed by **Zihao Jing**
 
 Read, understand, and edit project files with your AI assistant. MarkAtlas lets you collect comments across Markdown, code, and PDFs, review them together, and send a short request with separate context attachments to the current chat. Each comment keeps its file location; screenshot comments keep the image beside the matching request.
+
+## Install in ChatGPT Desktop
+
+MarkAtlas has been submitted to OpenAI for review. Public plugin search is not supported yet; if approved and published, it will be available from the public Plugins Directory. Until then, follow the [source installation guide](../README.md#install-from-source-in-chatgpt-desktop).
+
+On macOS, download or clone the complete repository, install and sign in to ChatGPT Desktop with local plugin support, then run this from the repository root:
+
+```sh
+bash install-macos.command
+```
+
+The script installs Node.js 22/npm, Poppler PDF tools, and build dependencies, builds MarkAtlas, and opens the local plugin page. Finish with **Install** in ChatGPT Desktop, then open a local chat and ask to open MarkAtlas. Apple command-line tools may require completing an installation dialog and rerunning setup. Use `--with-codex` to also install the optional Codex CLI for background explanations, then run `codex` and sign in. LaTeX compilation requires a separately installed toolchain.
+
+The repository's `.agents/plugins/marketplace.json` is a local catalog pointing to `plugin/`. Share the repository URL to let others download, build, and install their own copy; the catalog is separate from the public directory. Windows and Linux installation are not currently supported by this setup.
 
 ## Open a file or project
 
@@ -65,7 +81,7 @@ Drafts are stored locally when storage is available. Sending review context shar
 From the repository root:
 
 ```sh
-npm install --prefix plugin
+npm ci --include=dev --prefix plugin
 npm run build --prefix plugin
 npm run preview --prefix plugin -- /path/to/project
 ```

@@ -5,6 +5,8 @@
 <h1 align="center">MarkAtlas</h1>
 <p align="center"><strong>Collect comments. Let AI act.</strong><br>Developed by Zihao Jing</p>
 
+<p align="center"><strong>English</strong> | <a href="README.zh-CN.md">简体中文</a></p>
+
 MarkAtlas turns your file review into a clear request for your AI assistant. Read a document, select the passages that need attention, and leave comments where they belong. When you are ready, click **Send** to submit a short request with each comment as a separate context attachment, including file locations, concise excerpts, and screenshots.
 
 Review the whole picture before asking AI to act.
@@ -46,11 +48,65 @@ The file tree lists names first and reads file contents when you open them. A fo
 
 Markdown and code editing write to connected project files. Ordinary PDF review does not provide direct PDF content editing. LaTeX compilation uses your own installation and is run by the assistant or by you; MarkAtlas does not bundle a compiler or expose a Build button.
 
-## Get started
+## Install from source in ChatGPT Desktop
 
-Install MarkAtlas in a compatible desktop host, open it from the plugin's global or conversation entry, and connect a project folder if the host has not supplied one. Start with any Markdown, code, or PDF file from the tree.
+**MarkAtlas has been submitted to OpenAI for review. Public plugin search is not supported yet. If approved and published, you will be able to find and install MarkAtlas directly from the public Plugins Directory. For now, install from this repository.**
 
-See the [plugin guide](plugin/README.md) for requirements, controls, and local development. Native folder selection currently uses a macOS helper. Background explanations require host MCP sampling or an installed, signed-in Codex CLI; PDF viewing requires local Poppler utilities. Scanned PDFs can be displayed, but text selection requires an existing text layer.
+The source setup below is for **macOS**, with a ChatGPT Desktop version that supports local plugins, MCP Apps, and local chats. The native file/folder picker requires macOS and Apple's Swift command-line tools; Windows and Linux setup are not currently supported. Install and sign in to [ChatGPT Desktop](https://learn.chatgpt.com/docs/quickstart?setup=app) first.
+
+### 1. Download this repository
+
+On GitHub, select **Code → Download ZIP**, extract the archive, and open Terminal in the extracted folder. Alternatively, if Git is installed:
+
+```sh
+git clone https://github.com/zihao-jing/gpt-commenter.git
+cd gpt-commenter
+```
+
+Keep the complete repository, including its hidden `.agents` folder.
+
+### 2. Run the setup script
+
+From the repository folder:
+
+```sh
+bash install-macos.command
+```
+
+The [setup script](install-macos.command) checks Apple's command-line tools, installs [Homebrew](https://brew.sh/) if needed, installs **Node.js 22 and npm** plus **Poppler** (`pdftotext`, `pdftocairo`, and `pdftoppm`), installs the locked npm dependencies, and builds the viewer, MCP server, and native file picker. The PDF viewer is part of MarkAtlas; no separate PDF reader is required. Run as your normal user, without `sudo`; Homebrew may request your password. If the Apple tools installation dialog appears, finish it and rerun the script.
+
+For background explanations on hosts without MCP sampling, also install Codex CLI:
+
+```sh
+bash install-macos.command --with-codex
+```
+
+Afterward, run `codex` in Terminal and sign in. See the [Codex CLI guide](https://learn.chatgpt.com/docs/codex/cli). LaTeX compilation and precise SyncTeX mapping additionally require your own LaTeX toolchain; they are optional for ordinary PDF review. The setup script does not install a TeX distribution.
+
+### 3. Finish installation in ChatGPT Desktop
+
+The script opens MarkAtlas's **local plugin page** in ChatGPT Desktop and prints the same link in Terminal. Select **Install** and approve the requested access. If necessary, restart ChatGPT Desktop and open the printed link again. Use `bash install-macos.command --no-open` to build and print the link without opening it.
+
+Open a chat that runs locally and ask **“Open MarkAtlas so I can review my files.”** Connect a project folder or open a file, then start reviewing Markdown, code, or PDFs. Scanned PDFs can be displayed, but text selection requires an existing text layer.
+
+This uses the repository's [local marketplace catalog](.agents/plugins/marketplace.json), which points to `./plugin`. A local marketplace is a catalog of plugin folders, not a public listing or a hosted download service. You can share this repository URL with other users: each user downloads their own copy, runs setup, and installs from its local page. They do not need access to your computer. See OpenAI's [local plugin packaging guide](https://developers.openai.com/plugins/build/plugins) and [local plugin links](https://learn.chatgpt.com/docs/reference/commands#local-plugin).
+
+### Manual setup and updates
+
+If Homebrew and Apple's Swift command-line tools are already installed, the build steps are:
+
+```sh
+brew install node@22 poppler
+export PATH="$(brew --prefix node@22)/bin:$(brew --prefix)/bin:$PATH"
+npm ci --include=dev --prefix plugin
+npm run build --prefix plugin
+```
+
+Run `bash install-macos.command` to open the local installation page afterward. Building alone does not install the plugin in ChatGPT Desktop. If the app does not recognize the link, update it to a version with local plugin support; managed workspaces may restrict local plugins.
+
+To update a Git checkout, run `git pull` and rerun the setup script. Refresh or reinstall the local plugin in ChatGPT Desktop and restart the app so it loads the rebuilt files. ChatGPT installs a cached copy, so editing this checkout alone may not update the running plugin.
+
+See the [plugin guide](plugin/README.md) for controls, troubleshooting, and local development.
 
 ---
 
@@ -61,4 +117,4 @@ Collect comments. Let AI act.
 
 [Support](docs/SUPPORT.md) · [Privacy](docs/PRIVACY.md) · [Terms](docs/TERMS.md)
 
-The Apple Silicon desktop distribution bundles Node and PDF tools; the source distribution requires building. See the release README for installation and platform requirements.
+The separate Apple Silicon desktop distribution bundles Node and PDF tools. The source installation above builds from this repository and uses locally installed PDF tools.
