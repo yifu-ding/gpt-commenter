@@ -33,7 +33,8 @@ through the host/CLI is disclosed separately from local file processing.
 | Case 5: settings read | Not run in host | Packaging checks can read settings; model-triggered review remains unrun. |
 | Negative cases 1–3 | Not run | Must observe model refusing unsupported mail, signing, and OCR actions. |
 | Policy pages | Approved by publisher | Publisher authorized finalization and GitHub publication on 21 October 2026. |
-| Public URLs and fixture links | Not verified | Publish approved pages, then inspect public content without login. |
+| Four public listing URLs | Verified | Website, support, privacy and terms fetched without credentials on 21 October 2026; expected page content present. |
+| Fixtures | Included in ZIP | Synthetic Markdown, code and PDF fixtures are bundled in review-fixtures/. |
 | Demo recording and playable URL | Missing | Follow DEMO.md in the real desktop host, play back and host recording. |
 | Developer verification | Unverified | Publisher completes identity verification in the intended organization. |
 | Local-MCP allowlisting | Unverified | OpenAI representative must confirm submitting organization eligibility. |
