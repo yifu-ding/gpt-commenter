@@ -15,7 +15,7 @@ export function createReviewAttachment(extensions) {
         const result=await extensions.message.send({role:'user',content:[{
           type:'resource',resource:{uri:`markdown-review://annotation/${encodeURIComponent(item.id)}/${encodeURIComponent(item.updatedAt || 'draft')}`,
             mimeType:'text/markdown',text:annotationText(item)}
-        },...(item.pdf?.screenshot?[{type:'image',mimeType:'image/jpeg',data:item.pdf.screenshot.split(',')[1]}]:[])],_meta:{'openai/message':{target:'active',send:false}}});
+        },...((item.pdf?.screenshot || item.html?.screenshot)?[{type:'image',mimeType:'image/jpeg',data:(item.pdf?.screenshot || item.html?.screenshot).split(',')[1]}]:[])],_meta:{'openai/message':{target:'active',send:false}}});
         if(result?.isError)throw new Error('The host rejected the review attachment.');
         staged.add(item.id);
       });

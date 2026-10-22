@@ -31,7 +31,7 @@ async function executable(name){
     const bundled=fileURLToPath(new URL(`../runtime/pdf/bin/${name}`,import.meta.url));
     try{if((await stat(bundled)).isFile())return bundled;}catch{}
   }
-  for(const path of [...(process.env.PATH || '').split(':'),'/Library/TeX/texbin','/opt/homebrew/bin','/usr/local/bin','/usr/bin']){
+  for(const path of [fileURLToPath(new URL('../runtime/tex/bin/universal-darwin/',import.meta.url)),...(process.env.PATH || '').split(':'),'/Library/TeX/texbin','/opt/homebrew/bin','/usr/local/bin','/usr/bin']){
     const candidate=join(path,name);try{if((await stat(candidate)).isFile())return candidate;}catch{}
   }
   throw Error(`${name} is not installed. PDF display requires Poppler (pdftotext, pdftocairo and pdftoppm); precise source mapping uses the user's installed SyncTeX.`);
@@ -40,7 +40,7 @@ async function run(name,args,options={}){
   try{
     const command=await executable(name),bundled=command===fileURLToPath(new URL(`../runtime/pdf/bin/${name}`,import.meta.url));
     const pdfRoot=fileURLToPath(new URL('../runtime/pdf/',import.meta.url));
-    return await execute(command,args,{timeout:120000,maxBuffer:24*1024*1024,...(bundled?{
+    return await execute(command,args,{timeout:120000,maxBuffer:24*1024*1024,env:{...process.env,PATH:fileURLToPath(new URL('../runtime/tex/bin/universal-darwin/',import.meta.url))+':'+(process.env.PATH || '')},...(bundled?{
       cwd:pdfRoot,env:{...process.env,FONTCONFIG_FILE:join(pdfRoot,'fonts.conf'),XDG_CACHE_HOME:join(process.env.PLUGIN_DATA || tmpdir(),'markatlas-pdf-cache')}
     }:{}),...options});
   }

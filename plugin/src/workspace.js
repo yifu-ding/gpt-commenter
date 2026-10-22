@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {isSupportedText,isOfficeTemporary} from './file-types.js';
 import {fileContent,fileLimit} from './file-content.js';
-import {readdir,realpath,readFile,stat,open,rename,unlink} from 'node:fs/promises';
+import {readdir,realpath,readFile,stat,lstat,link,open,rename,unlink} from 'node:fs/promises';
 import {resolve,relative,isAbsolute,basename,dirname,join} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -54,7 +54,7 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
         if(!(await stat(root)).isDirectory())throw Error('Choose a folder, not a file.');
       } else [root]=await roots();
       if(!root)throw Error('No workspace folder was shared by the app. Use Open folder to connect a local folder.');
-      const files=[];let omitted=0,visited=0;
+      const files=[],folders=[];let omitted=0,visited=0;
       async function walk(dir,prefix='',depth=0) {
         if(depth>20){omitted++;return;}
         const entries=await readdir(dir,{withFileTypes:true});
@@ -62,11 +62,13 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
           if(++visited>10000){omitted++;break;}
           if(entry.isSymbolicLink() || ignored.has(entry.name) || isOfficeTemporary(entry.name) || entry.name==='.gpt-commenter-build'){omitted++;continue;}
           const path=prefix?`${prefix}/${entry.name}`:entry.name;
-          if(entry.isDirectory())await walk(resolve(dir,entry.name),path,depth+1);
+          if(entry.isDirectory()){folders.push(path);await walk(resolve(dir,entry.name),path,depth+1);}
           else if(entry.isFile())files.push({name:entry.name,webkitRelativePath:`${basename(root)}/${path}`});
         }
       }
       await walk(root);const tree=buildProject(files);tree.root.name=basename(root);
+      for(const path of folders){let parent=tree.root,prefix='';for(const name of path.split('/')){prefix=prefix?prefix+'/'+name:name;let child=parent.children.find(n=>n.type==='directory' && n.name===name);if(!child){child={type:'directory',name,path:prefix,children:[]};parent.children.push(child);}parent=child;}}
+      const sort=node=>{node.children.sort((a,b)=>(a.type===b.type?0:a.type==='directory'?-1:1)||a.name.localeCompare(b.name));node.children.filter(n=>n.type==='directory').forEach(sort);};sort(tree.root);
       if(folderPath!==undefined)connected.add(root);
       return {root:tree.root,rootPath:root,omitted:omitted+tree.omitted};
     },
@@ -77,6 +79,19 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
       const etag=fileVersion(info);
       if(ifNoneMatch===etag)return {name:path,etag,notModified:true};
       return {name:path,...fileContent(path,await readFile(target)),etag};
+    },
+    async move(root,path,folder) {
+      await roots();
+      if(!allowed.includes(root) && !connected.has(root))throw Error('Open a project folder before moving files.');
+      if(isAbsolute(path) || isAbsolute(folder) || [...path.split('/'),...folder.split('/')].includes('..'))throw Error('Move files only within the current project.');
+      const source=await inside(root,path),directory=await inside(root,folder || '.');
+      if(source!==resolve(root,path) || directory!==resolve(root,folder || '.') || !(await lstat(source)).isFile() || !(await stat(directory)).isDirectory())throw Error('Choose a regular file and a project folder.');
+      const target=join(directory,basename(source)),next=relative(root,target);
+      if(source===target)return {path:next};
+      // link fails atomically on an existing destination; never overwrite a file.
+      try{await link(source,target);}catch(error){if(error.code==='EEXIST')throw Error('A file with this name already exists in the destination folder.');if(error.code==='EXDEV')throw Error('Moving between different filesystems is not supported.');throw error;}
+      try{await unlink(source);}catch(error){await unlink(target).catch(()=>{});throw error;}
+      return {path:next};
     },
     async save(root,path,text,expectedEtag) {
       await roots();

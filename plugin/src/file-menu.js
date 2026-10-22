@@ -1,4 +1,4 @@
-export function createFileMenu({tree,menu,root,onError}) {
+export function createFileMenu({tree,menu,root,onError,onWebPreview,onNativePreview}) {
   let selected=null,opener=null;
   const buttons=[...menu.querySelectorAll('button')];
   function close(restoreFocus=false){menu.hidden=true;if(restoreFocus)opener?.focus({preventScroll:true});selected=null;}
@@ -13,19 +13,24 @@ export function createFileMenu({tree,menu,root,onError}) {
     const path=target.dataset.projectPath ?? target.parentElement.dataset.projectFolder;if(path===undefined)return;
     event.preventDefault();opener=target;const base=root()?.replace(/[\\/]+$/,'');
     selected={relative:path,absolute:base?`${base}/${path}`:null};
-    buttons[0].disabled=!selected.absolute;menu.hidden=false;
+    buttons[0].disabled=!selected.absolute;
+    for(const button of buttons)if(button.dataset.action==='web-preview')button.hidden=!onWebPreview || !target.dataset.projectPath || !/\.html?$/i.test(path);
+    for(const button of buttons)if(button.dataset.action==='native-preview'){button.hidden=!onNativePreview || !target.dataset.projectPath;button.disabled=!selected.absolute;}
+    for(const button of buttons)if(button.dataset.action==='web-preview')button.disabled=!selected.absolute;menu.hidden=false;
     const anchor=target.getBoundingClientRect(),rect=menu.getBoundingClientRect();
     const x=event.clientX || anchor.left,y=event.clientY || anchor.bottom;
     menu.style.left=`${Math.max(8,Math.min(x,window.innerWidth-rect.width-8))}px`;
     menu.style.top=`${Math.max(8,Math.min(y,window.innerHeight-rect.height-8))}px`;
-    buttons.find(button=>!button.disabled)?.focus({preventScroll:true});
+    buttons.find(button=>!button.disabled && !button.hidden)?.focus({preventScroll:true});
   });
   for(const button of buttons)button.addEventListener('click',async()=>{
+    if(button.dataset.action==='native-preview'){const path=selected?.relative;close(true);try{if(path)await onNativePreview(path);}catch(error){onError(error);}return;}
+    if(button.dataset.action==='web-preview'){const path=selected?.relative;close(true);try{if(path)await onWebPreview(path);}catch(error){onError(error);}return;}
     const text=selected?.[button.dataset.copyPath];if(text===undefined || text===null)return;
     close(true);try{await copy(text);}catch(error){onError(error);}
   });
   menu.addEventListener('keydown',event=>{
-    const available=buttons.filter(button=>!button.disabled),index=available.indexOf(document.activeElement);
+    const available=buttons.filter(button=>!button.disabled && !button.hidden),index=available.indexOf(document.activeElement);
     if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
       event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?available.length-1:(index+(event.key==='ArrowDown'?1:-1)+available.length)%available.length;available[next]?.focus();
     }

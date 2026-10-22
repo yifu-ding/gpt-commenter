@@ -82,7 +82,7 @@ try {
   assert.ok(scripts[0][1] === bundle, 'embedding must preserve bundled JavaScript literally');
   new Script(scripts[0][1], {filename: 'served-viewer.js'});
 
-  assert.equal(resource.contents[0]._meta['openai/ui'].preferredDisplayMode, 'fullscreen');
+  assert.equal(resource.contents[0]._meta['openai/ui'].preferredDisplayMode, 'inline');
   assert.deepEqual(client.getServerCapabilities().experimental['openai/settings'],{readTool:'markatlas_settings_read',updateTool:'markatlas_settings_update'});
   assert.equal((await client.callTool({name:'markatlas_settings_read',arguments:{}})).structuredContent.values.explanationModel,'gpt-6-luna');
   assert.equal((await client.callTool({name:'markatlas_settings_update',arguments:{set:{explanationModel:'gpt-6.1-sol'}}})).structuredContent.values.explanationModel,'gpt-6.1-sol');

@@ -113,6 +113,12 @@ npm run build --prefix plugin
 **MarkAtlas** · 开发者：**Zihao Jing**<br>
 收集批注，让 AI 行动。
 
+## 第三方组件与致谢
+
+部分样式来源于或改编自 [Blue Topaz](https://github.com/PKM-er/Blue-Topaz_Obsidian-css)，特此感谢 [WhyI](https://github.com/whyt-byte) 和 [pkmer.cn](https://pkmer.cn)。
+
+该主题采用 MIT 许可证；版权声明及完整许可文本已保留在 [blue-topaz.css](plugin/assets/obsidian/blue-topaz.css) 中。
+
 ## 支持与政策
 
 [支持（英文）](docs/SUPPORT.md) · [隐私政策（英文）](docs/PRIVACY.md) · [使用条款（英文）](docs/TERMS.md)

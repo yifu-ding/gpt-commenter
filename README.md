@@ -113,6 +113,12 @@ See the [plugin guide](plugin/README.md) for controls, troubleshooting, and loca
 **MarkAtlas** · Developed by **Zihao Jing**<br>
 Collect comments. Let AI act.
 
+## Third-party components and acknowledgements
+
+Partial style(s) is(are) sourced or adapted from Blue Topaz (https://github.com/PKM-er/Blue-Topaz_Obsidian-css), and I would like to express my appreciation to WhyI (https://github.com/whyt-byte) and pkmer.cn (https://pkmer.cn).
+
+The theme is MIT-licensed; its copyright notice and full license are preserved in [blue-topaz.css](plugin/assets/obsidian/blue-topaz.css).
+
 ## Support and policies
 
 [Support](docs/SUPPORT.md) · [Privacy](docs/PRIVACY.md) · [Terms](docs/TERMS.md)

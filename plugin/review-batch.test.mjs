@@ -57,3 +57,9 @@ await prepareReviewBatch([entries[0]],{...dependencies,reviews:{resolve:async(id
 
 const mixed=await prepareReviewBatch(entries,{...dependencies,reviews:{resolve:async(id)=>id==='a'?{status:'deleted'}:{status:'current',hasUnsavedEdits:false,current:{startLine:1,endLine:1,excerpt:'Figure'}}}});
 assert.deepEqual(mixed.map(entry=>entry.item.id),['b'],'deleted comments do not block valid comments');
+
+const htmlItem={id:'html-region',selectedText:'Visible caption',message:'Review layout',startLine:1,endLine:2,html:{mapping:'region',region:{x:10,y:20,width:100,height:80},screenshot:'data:image/jpeg;base64,YQ=='}};
+const htmlContent=reviewBatchContent([{root:'/html',path:'index.html',item:htmlItem}]);
+assert.ok(htmlContent.some(c=>c.type==='image' && c.data==='YQ=='));assert.match(htmlContent.map(c=>c.text||'').join(' '),/HTML region.*visual reference/);
+const htmlPrepared=await prepareReviewBatch([{root:'/html',path:'index.html',item:htmlItem}],dependencies);assert.equal(htmlPrepared[0].item.selectedText,'Visible caption');
+assert.deepEqual(await prepareReviewBatch([{root:'/html',path:'index.html',item:{...htmlItem,anchorStatus:'edited'}}],dependencies),[]);

@@ -4,9 +4,9 @@ export async function prepareReviewBatch(entries,{reviews,workspace,latex}) {
   for(const entry of entries){
     const {item,root,path,etag}=entry;
     const live=await reviews.resolve(item.id,{fullSelection:true});
-    if(['removed','deleted'].includes(live.status))continue;
+    if(['removed','deleted'].includes(live.status) || item.html?.region && (item.anchorStatus==='edited' || live.status==='edited'))continue;
     if(root && live.hasUnsavedEdits)throw Error(`Save edits in ${path || item.sourceName} before sending.`);
-    let next={...item,startLine:live.current.startLine,endLine:live.current.endLine,selectedText:live.current.selectedText ?? (root?live.current.excerpt:item.selectedText)};
+    let next={...item,startLine:live.current.startLine,endLine:live.current.endLine,selectedText:item.html?item.selectedText:live.current.selectedText ?? (root?live.current.excerpt:item.selectedText)};
     if(root && path){
       const key=JSON.stringify([root,path]);
       if(!files.has(key))files.set(key,item.pdf?await latex.read(root,path):await workspace.read(root,path));
