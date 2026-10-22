@@ -20,6 +20,7 @@ let unavailable=true;
 refresh.watch({text:'new',read:async()=>{if(unavailable)throw Error('File temporarily missing');return {text:'recovered'};}});
 await refresh.check();await refresh.check();assert.deepEqual(errors,['File temporarily missing'],'repeated errors do not spam the status');
 unavailable=false;await refresh.check();assert.equal(applied.at(-1),'recovered');
+let finishRead;refresh.watch({text:'before save',etag:'old',read:()=>new Promise(resolve=>finishRead=resolve)});const pendingRead=refresh.check();refresh.setText('saved text','new');finishRead({text:'stale disk read',etag:'old'});await pendingRead;assert.ok(!applied.includes('stale disk read'),'a refresh begun before autosave cannot restore older content');
 refresh.stop();assert.equal(timers.size,0,'closing a file cancels its timer');
 await refresh.check();assert.equal(applied.at(-1),'recovered');
 console.log('Automatic file refresh, draft preservation, conditional reads, stale-request isolation, and recovery checks passed');

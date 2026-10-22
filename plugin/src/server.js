@@ -1,3 +1,5 @@
+import {launchPreviewBrowser} from './browser-launch.js';
+import {webPreviewService} from './web-preview.js';
 import {singleFileService} from './single-file.js';
 import {prepareReviewBatch} from './prepare-review-batch.js';
 import {latexService} from './latex.js';
@@ -15,9 +17,13 @@ import {generateExplanation} from './background-explanation.js';
 
 const UI_URI = 'ui://gpt-commenter/markdown-viewer-v3';
 const here = new URL('.', import.meta.url);
-const template = readFileSync(new URL('../src/viewer.html', here), 'utf8');
-const script = readFileSync(new URL('./viewer.js', here), 'utf8');
-const html = template.replace('/* VIEWER_SCRIPT */', () => script);
+// Read assets per request so a host refresh does not reuse a startup snapshot.
+function viewerHtml(){
+  const template=readFileSync(new URL('../src/viewer.html',here),'utf8');
+  const script=readFileSync(new URL('./viewer.js',here),'utf8');
+  const theme=readFileSync(new URL('./obsidian.css',here),'utf8');
+  return template.replace('/* OBSIDIAN_THEME */',()=>theme).replace('/* VIEWER_SCRIPT */',()=>script);
+}
 
 const manifest = JSON.parse(readFileSync(new URL('../plugin.json',here),'utf8'));
 const brand = manifest.extensions['com.openai'].interface;
@@ -27,8 +33,8 @@ const icons = [[brand.composerIcon,null],[brand.logo,'light'],[brand.logoDark,'d
 }));
 const server = new McpServer({name: 'gpt-commenter-markdown-demo', title:brand.displayName, version:manifest.version, icons});
 registerAppResource(server, brand.displayName, UI_URI, {title:brand.displayName,icons}, async () => ({
-  contents: [{uri: UI_URI, mimeType: RESOURCE_MIME_TYPE, text: html,
-    _meta: {'openai/ui': {preferredDisplayMode: 'fullscreen', availableDisplayModes: ['inline', 'fullscreen']}}}]
+  contents: [{uri: UI_URI, mimeType: RESOURCE_MIME_TYPE, text: viewerHtml(),
+    _meta: {'openai/ui': {preferredDisplayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen']}}}]
 }));
 registerAppTool(server, 'open_markdown_viewer', {
   title: brand.displayName,
@@ -65,6 +71,12 @@ const workspace=workspaceAccess(async()=>{
   return (await server.server.listRoots()).roots;
 });
 const singleFiles=singleFileService(workspace);
+const webPreviews=webPreviewService(workspace);
+registerAppTool(server,'open_html_web_preview',{
+  description:'Serve a connected HTML file and relative assets on a private loopback web server for browser viewing.',
+  inputSchema:{root:z.string(),path:z.string(),launchBrowser:z.boolean().optional()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
+},async({root,path,launchBrowser})=>{const result=await webPreviews.open(root,path);if(launchBrowser)result.browserOpened=await launchPreviewBrowser(result.url);return {content:[],structuredContent:result};});
+
 registerAppTool(server,'open_review_single_file',{
   description:'Open a selected local file and its parent folder, or import a resource with no local path.',
   inputSchema:{path:z.string().optional(),name:z.string().optional(),data:z.string().max(70*1024*1024).optional(),resourceKey:z.string().optional()},
@@ -80,6 +92,7 @@ registerAppTool(server,'list_markdown_project',{
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
 },async({folderPath})=>({content:[],structuredContent:await workspace.list(folderPath)}));
 const latex=latexService(workspace);
+registerAppTool(server,'resolve_native_preview_file',{description:'Resolve a connected file for the host native preview.',inputSchema:{root:z.string(),path:z.string()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path})=>({content:[],structuredContent:{path:await workspace.resolve(root,path)}}));
 registerAppTool(server,'resolve_native_office_file',{
   description:'Resolve a connected Word or Excel file for opening in the host native viewer without reading its contents.',
   inputSchema:{root:z.string(),path:z.string()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
@@ -106,6 +119,11 @@ registerAppTool(server,'save_review_project_file',{
   inputSchema:{root:z.string(),path:z.string(),text:z.string().max(5*1024*1024),expectedEtag:z.string()},
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false}
 },async({root,path,text,expectedEtag})=>({content:[],structuredContent:await workspace.save(root,path,text,expectedEtag)}));
+registerAppTool(server,'move_review_project_file',{
+  description:'Move a file to another folder within a connected project without overwriting existing files.',
+  inputSchema:{root:z.string(),path:z.string(),folder:z.string()},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false}
+},async({root,path,folder})=>({content:[],structuredContent:await workspace.move(root,path,folder)}));
 const reviews=reviewStore();
 registerAppTool(server,'update_review_document',{
   description:'Sync the local working document and live annotation anchors without sending a chat message.',

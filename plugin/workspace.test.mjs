@@ -78,5 +78,19 @@ try {
  await assert.rejects(()=>manual.nativeOfficePath(root,'docs/page.md'),/Choose a Word/);
  await assert.rejects(()=>manual.nativeOfficePath(root,'../secret.md'),/outside/);
  await symlink(join(base,'secret.md'),join(root,'escape.docx'));await assert.rejects(()=>manual.nativeOfficePath(root,'escape.docx'),/outside/);
+ await mkdir(join(root,'empty-target'));
+ assert.ok((await manual.list(root)).root.children.some(n=>n.name==='empty-target' && n.type==='directory'));
+ const beforeMove=await manual.read(root,'docs/page.md');
+ assert.equal((await manual.move(root,'docs/page.md','empty-target')).path,'empty-target/page.md');
+ assert.equal((await manual.read(root,'empty-target/page.md')).text,beforeMove.text);
+ await assert.rejects(()=>manual.read(root,'docs/page.md'),/ENOENT/);
+ await writeFile(join(root,'docs/page.md'),'Do not replace');
+ await assert.rejects(()=>manual.move(root,'empty-target/page.md','docs'),/already exists/);
+ assert.equal((await manual.read(root,'docs/page.md')).text,'Do not replace');
+ await assert.rejects(()=>manual.move(root,'empty-target/page.md','..'),/current project/);
+ await assert.rejects(()=>manual.move(root,'empty-target/page.md','node_modules'),/outside/);
+ await assert.rejects(()=>manual.move(root,'escape.md','docs'),/outside/);
+ await assert.rejects(()=>manual.move(root,'docs',''),/regular file/);
+ assert.equal((await manual.move(root,'empty-target/page.md','')).path,'page.md');
  console.log('Current-project roots, configured fallback, file reads, traversal and symlink boundary checks passed');
 }finally{await rm(base,{recursive:true,force:true});}

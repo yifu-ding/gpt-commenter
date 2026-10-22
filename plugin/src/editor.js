@@ -74,12 +74,15 @@ export function createCodeEditor(container,{onChange,onSelection,onNote,onSave})
       if(mode!=='changes')current.dispatch({effects:notesEffect.of(items)});
     },
     destroy,
+    capture(){return current instanceof EditorView?{selection:current.state.selection,top:current.scrollDOM.scrollTop,left:current.scrollDOM.scrollLeft}:null;},
+    restore(saved){if(current instanceof EditorView){current.dispatch({selection:saved.selection});current.scrollDOM.scrollTop=saved.top;current.scrollDOM.scrollLeft=saved.left;}},
+    findSpan(from,to){if(current instanceof EditorView)current.dispatch({selection:{anchor:from,head:to},effects:EditorView.scrollIntoView(from,{y:'center'})});},
     measure(){if(current instanceof EditorView)current.requestMeasure();else if(current){current.a.requestMeasure();current.b.requestMeasure();}},
     selectSpan(from,to){if(current instanceof EditorView){current.focus();current.dispatch({selection:{anchor:from,head:to}});}},
     focusLine(line){if(current instanceof EditorView){const position=current.state.doc.line(Math.max(1,Math.min(line,current.state.doc.lines))).from;current.dispatch({selection:{anchor:position},effects:EditorView.scrollIntoView(position,{y:'center'})});current.focus();}},
     caret(){return current instanceof EditorView ? current.state.selection.main.head : 0;},
     focusAt(position){if(current instanceof EditorView){current.dispatch({selection:{anchor:Math.min(position,current.state.doc.length)}});current.focus();}},
-    focus(){if(current instanceof EditorView){const selection=current.state.selection;current.focus();current.dispatch({selection});}}
+    focus(){if(current instanceof EditorView){const selection=current.state.selection;current.contentDOM.focus({preventScroll:true});current.dispatch({selection});}}
   };
   function capture(view){const selection=view.state.selection.main;if(selection.empty)return;const text=view.state.doc.toString();onSelection({...sourceSelection(text,selection.from,selection.to),mappingStatus:'exact'},view.coordsAtPos(selection.to));}
 }
