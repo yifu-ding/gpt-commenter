@@ -1,7 +1,7 @@
 // Move the original controls (and their handlers) into a compact overflow menu.
 export function createTreeToolbar(toolbar){
  const actions=[...toolbar.querySelectorAll(':scope > button')],more=document.createElement('button'),menu=document.createElement('div');
- more.id='tree-tools-more';more.className='folder-button';more.type='button';more.textContent='>>';more.title='More file actions';more.setAttribute('aria-label','More file actions');more.setAttribute('aria-haspopup','menu');more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls','tree-tools-overflow');more.hidden=true;
+ more.id='tree-tools-more';more.className='folder-button';more.type='button';more.innerHTML='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 7 5 5-5 5m7-10 5 5-5 5"/></svg>' ;more.title='More file actions';more.setAttribute('aria-label','More file actions');more.setAttribute('aria-haspopup','menu');more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls','tree-tools-overflow');more.hidden=true;
  menu.id='tree-tools-overflow';menu.hidden=true;menu.setAttribute('role','menu');menu.setAttribute('aria-label','More file actions');toolbar.append(more);document.body.append(menu);
  let count=actions.length;
  function close(focus=false){menu.hidden=true;more.setAttribute('aria-expanded','false');if(focus && !more.hidden)more.focus();}
