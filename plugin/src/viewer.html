@@ -238,7 +238,9 @@ body.pane-narrow .toolbar .breadcrumb{flex-basis:calc(100% - 115px)}
 .tree-tools button,#delete,.icon-button{border-radius:50%!important}
 #document mark[data-annotation],#document .cm-review-note:not(.pending-selection){background:#ffe8a380!important;color:inherit;text-decoration-line:underline;text-decoration-color:#c9ad59;text-decoration-thickness:2px;text-underline-offset:3px;border-radius:0;cursor:pointer}
 #document mark[data-annotation]:hover,#document mark[data-annotation]:focus-visible,#document .cm-review-note:not(.pending-selection):hover{text-decoration-color:var(--fg)}
-.pdf-highlight{background:transparent!important;border-bottom:2px solid #888}
+#document .pdf-highlight{background:color-mix(in srgb,var(--markatlas-accent,#1687d9) 24%,transparent)!important;border:0;border-radius:2px;mix-blend-mode:multiply}
+#document .pdf-highlight[data-annotation]:hover,#document .pdf-highlight[data-annotation]:focus-visible{background:color-mix(in srgb,var(--markatlas-accent,#1687d9) 36%,transparent)!important}
+#document .pdf-highlight[data-annotation]:focus-visible{outline:1px solid var(--markatlas-accent,#1687d9);outline-offset:1px}
 ::highlight(markatlas-selection){background:transparent;text-decoration:underline #888 2px}
 @media(max-width:520px){.toolbar .toolbar-actions{gap:0;padding:2px}.toolbar .toolbar-actions>button{width:28px;height:28px;min-width:28px}.toolbar .toolbar-actions>#comment{padding:5px 8px}}
 </style>
