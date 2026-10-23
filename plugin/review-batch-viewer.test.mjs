@@ -16,7 +16,7 @@ const inputSource=readFileSync(new URL('./src/viewer.js',import.meta.url),'utf8'
 .replace("import {OpenAIExtensions, OpenAIFileEntrypointInputSchema} from '@openai/mcp-extensions/app';",`class OpenAIExtensions {get files(){return window.nativeFiles;}get resources(){return window.resources;}get message(){if(!window.allowContext)return undefined;return {async send(params){window.chatCalls.push(params);if(window.composerUnavailable)throw Error('MCP error -32601: MCP app messages require an available composer');return window.sendError?{isError:true}:{};}};}get modelContext(){if(!window.allowContext)return undefined;return {getCurrent:()=>window.hostState,async update(params){window.contextCalls.push(params);window.hostState=params.content.length?{...params,updateId:'update'}:null;return {};}};}}const OpenAIFileEntrypointInputSchema={safeParse(a){return {success:!!a?.file,data:a};}};`);
 // Explicit static-renderer fixture for legacy annotation tests; native-ui.test.mjs covers editable Preview.
 const legacyFixture= inputSource.replace("codeMode=isMarkdown(name)?'edit':previewable?'review':'edit'","codeMode=previewable?'review':'edit'");
-const bundle=await build({stdin:{contents:legacyFixture+'\nwindow.testWorkspace=acceptWorkspace;window.testMove=moveTreeFile;',resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false,platform:'browser'});
+const bundle=await build({stdin:{contents:legacyFixture+'\nwindow.testWorkspace=acceptWorkspace;window.testMove=moveTreeFile;window.testPdf=displayPdf;window.testDrafts=value=>{projectDrafts=value;};',resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false,platform:'browser'});
 window.eval(bundle.outputFiles[0].text);
 const $=id=>window.document.getElementById(id);
 assert.ok($('mode-cycle').querySelector('svg'),'empty viewer initializes Preview as an icon');assert.equal($('mode-cycle').textContent,'');
@@ -97,4 +97,13 @@ $('project-filter').value='settings';$('project-filter').dispatchEvent(new windo
 $('hidden-files-toggle').click();assert.ok($('project-tree').querySelector('[data-project-path=".config/settings.json"]'));
 $('project-filter').value='';await projectAt('/move-project');await comment('Move this comment too');
 await window.testMove('live.md','docs');assert.equal(window.movedArgs.path,'live.md');assert.equal($('filename').textContent,'live.md');assert.equal(window.reviewDocument.sourcePath,'/move-project/docs/live.md');assert.match($('review-list').textContent,/Move this comment too/);assert.match($('review-list').textContent,/docs\/live.md/);
+const pdfText='Alpha beta',pdfId='latex:/move-project/main.tex';
+const pdfHash=Buffer.from(await webcrypto.subtle.digest('SHA-256',new TextEncoder().encode(pdfText))).toString('hex');
+const pdfNotes=[0,1].map(n=>({id:`pdf-reopen-${n}`,kind:'comment',message:`PDF saved comment ${n}`,startOffset:n*6,endOffset:n?10:5,documentHash:pdfHash,updatedAt:'2026-10-23T12:42:00Z',pdf:{root:'/move-project',path:'main.pdf',page:1,fingerprint:'same'}}));
+window.testDrafts({[pdfId]:{text:pdfText,base:pdfText,items:pdfNotes}});
+window.localStorage.setItem(`markdown-review:working:${pdfId}:${pdfHash}`,JSON.stringify({text:pdfText,items:[]}));
+await window.testPdf({root:'/move-project',path:'main.pdf',main:'main.tex',sourcePath:'/move-project/main.pdf',text:pdfText,fingerprint:'same',etag:'same',pages:[{number:1,width:600,height:800,startOffset:0,endOffset:10,words:[{text:'Alpha',startOffset:0,endOffset:5,x:10,y:10,width:30,height:12},{text:'beta',startOffset:6,endOffset:10,x:45,y:10,width:25,height:12}]}]});
+assert.equal($('document').querySelectorAll('.pdf-highlight[data-annotation]').length,2,'saved PDF comments survive an empty older browser draft');
+assert.match($('review-list').textContent,/PDF saved comment 0/);
+assert.match($('review-list').textContent,/PDF saved comment 1/);
 console.log('Viewer batch queue, multi-comment send, rejection recovery, deletion, and closed-file highlight cleanup checks passed');window.close();

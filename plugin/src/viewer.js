@@ -1,3 +1,4 @@
+import {mergeNotes} from './project-state.js';
 import {createTreeToolbar} from './tree-toolbar.js';
 import {createEntryDialog} from './create-entry-dialog.js';
 import {applyThemeColor,syncRecentHistory,recentRootsKey} from './viewer-settings.js';
@@ -267,6 +268,7 @@ $('review-send').addEventListener('click',()=>sendQueuedReview());
 $('review-send-new').addEventListener('click',()=>sendQueuedReview('new'));
 renderBatch();
 const recoveryKey=()=>`markatlas:unsaved:${identity}`;
+function readLocalDraft(key,fallback=null){try{return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback;}catch{return fallback;}}
 let saveConflict=false,conflictBase=null;
 function persist() {
   if(filePreview && filePreview.kind!=='word')return true;
@@ -562,14 +564,17 @@ async function displayFileContent(name,text,fileIdentity = name,keepWatch = fals
   documentHash = [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2,'0')).join('');
   if(!preview || preview.kind==='word')try {
     const saved=projectDrafts[fileIdentity];
-    const recovery=!keepWatch && (JSON.parse(localStorage.getItem(recoveryKey()) || 'null') || (saved?.text!==saved?.base?saved:null));
-    const working=recovery || (!keepWatch && JSON.parse(localStorage.getItem(workingKey()) || 'null'));
+    const recovery=!keepWatch && (readLocalDraft(recoveryKey()) || (saved?.text!==saved?.base?saved:null));
+    const working=recovery || (!keepWatch && readLocalDraft(workingKey()));
     if(recovery && recovery.base!==diskSource && recovery.text!==diskSource){saveConflict=true;conflictBase=recovery.base;}
     if(working && typeof working.text==='string' && Array.isArray(working.items)){
       const restoredHash=await hashText(working.text);if(current!==revision)return false;source=working.text;documentHash=restoredHash;items=working.items;
     } else if(keepWatch)items=moveAnnotations(previousItems,previousText,source);
-    else items=saved?.items ? moveAnnotations(saved.items,saved.text,source) : JSON.parse(localStorage.getItem(storageKey()) || '[]');
+    else items=saved?.items ? moveAnnotations(saved.items,saved.text,source) : readLocalDraft(storageKey(),[]);
     if(!Array.isArray(items))items=[];
+    if(saved?.items)items=mergeNotes(items,moveAnnotations(saved.items,saved.text,source),[...removedNoteIds]);
+    const queued=[...batchEntries.values()].filter(entry=>entry.identity===identity && entry.item.documentHash===documentHash).map(entry=>entry.item);
+    items=mergeNotes(items,queued,[...removedNoteIds]);
     items=items.filter(x=>!removedNoteIds.has(x.id) && !x.batchSentVersion && typeof x.id==='string' && ['comment','explanation'].includes(x.kind) && Number.isInteger(x.startOffset) && Number.isInteger(x.endOffset) && x.startOffset>=0 && (x.pdf?.region || x.endOffset<=source.length) && x.startOffset<=x.endOffset);
     items=items.map(item=>({...item,documentHash}));
   } catch {items=[];}
@@ -734,7 +739,7 @@ async function submitNote() {
   if(kind==='explanation'){render();open(item,item,selectionAnchor);}else close(true);
   updateStatus(saved ? (kind === 'explanation' ? 'Generating explanation…' : 'Comment queued for review.') : 'Saved for this session only.');
   try {
-    try{await syncAnnotations(item.id);item.liveReference=true;if(current===revision)persist();}catch{}
+    try{await syncAnnotations(item.id);item.liveReference=true;if(current===revision)persist();await flushProjectState();}catch(error){updateStatus(`Comment kept locally; disk save failed: ${error.message}`);}
     if(item.kind === 'comment') {
       if(current===revision)updateStatus('Comment queued for review.');
     } else {
@@ -1335,7 +1340,7 @@ async function acceptWorkspace(tree,{selectDefault=false,allowDefault=true}={}) 
   if(changed && !(await canLeaveFile()))return false;
   if(changed){selectedCreationFolder=null;treeAutoExpand=true;await flushProjectState();dirtyIdentities.clear();projectDrafts={};linkedPdf=null;currentEtag=null;clearWorkspaceDocument();breadcrumbFolder=null;$('project-filter').value='';$('project-tree').replaceChildren();}
   if(project && !changed)Object.assign(project,tree);else project=tree;
-  if((initial || changed) && !tree.singleFile){try{const saved=await serverData('review_project_state',{root:tree.rootPath});projectDrafts=saved.drafts || {};for(const [key,draft] of Object.entries(projectDrafts)){const prefix='project:'+tree.rootPath.replace(/\/+$/,'')+'/';if(!key.startsWith(prefix))continue;for(const item of draft.items || [])if(item.kind==='explanation' && !removedNoteIds.has(item.id))batchEntries.set(item.id,{identity:key,root:tree.rootPath,path:key.slice(prefix.length),item});}for(const [id,entry] of saved.entries || [])if(entryRoot(entry)===normalizedRoot(tree.rootPath))batchEntries.set(id,entry);}catch(error){updateStatus(`Cannot load project notes: ${error.message}`);}}
+  if((initial || changed) && !tree.singleFile){try{const saved=await serverData('review_project_state',{root:tree.rootPath});for(const id of saved.removedIds || []){removedNoteIds.add(id);batchEntries.delete(id);}projectDrafts=saved.drafts || {};for(const [key,draft] of Object.entries(projectDrafts)){const prefix='project:'+tree.rootPath.replace(/\/+$/,'')+'/';if(!key.startsWith(prefix))continue;for(const item of draft.items || [])if(item.kind==='explanation' && !removedNoteIds.has(item.id))batchEntries.set(item.id,{identity:key,root:tree.rootPath,path:key.slice(prefix.length),item});}for(const [id,entry] of saved.entries || [])if(entryRoot(entry)===normalizedRoot(tree.rootPath))batchEntries.set(id,entry);}catch(error){updateStatus(`Cannot load project notes: ${error.message}`);}}
   if(!tree.singleFile && (initial || changed || selectDefault))rememberRoot(tree.rootPath);
   $('project-status').hidden=true;$('project-status').textContent='';
   renderBreadcrumb();renderProjectTree();renderBatch();
