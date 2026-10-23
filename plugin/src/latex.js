@@ -1,3 +1,4 @@
+import {pdfNavigation} from './pdf-navigation.js';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {readFile,readdir,stat} from 'node:fs/promises';
@@ -6,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 const execute=promisify(execFile),hash=s=>createHash('sha256').update(s).digest('hex');
-const hidden=new Set(['.git','node_modules','.codex','.agents','.aws','.gpt-commenter-build']);
+const hidden=new Set(['.markatlas','.git','node_modules','.codex','.agents','.aws','.gpt-commenter-build']);
 const decode=s=>s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi,(_,e)=>e[0]==='#'?String.fromCodePoint(e[1]?.toLowerCase()==='x'?parseInt(e.slice(2),16):Number(e.slice(1))):({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"})[e]);
 const attrs=s=>Object.fromEntries([...s.matchAll(/(\w+)="([^"]*)"/g)].map(m=>[m[1],m[2]]));
 export function parsePdfText(xml){
@@ -93,7 +94,8 @@ export function latexService(workspace){
     const {stdout}=await run('pdftotext',['-bbox-layout','-enc','UTF-8',target,'-']);
     const after=await stat(target);if(`${after.size}:${after.mtimeMs}:${after.ctimeMs}`!==etag)throw Error('PDF is changing. Waiting for the external build to finish.');
     const parsed=parsePdfText(stdout);
-    const result={...parsed,path,root,sourcePath:target,main:main?relative(root,main):null,fingerprint:hash(bytes),etag};
+    let navigation={links:{},outline:[]};try{navigation=await pdfNavigation(bytes);}catch(error){navigation.error=error.message;}
+    const result={...parsed,navigation,path,root,sourcePath:target,main:main?relative(root,main):null,fingerprint:hash(bytes),etag};
     if(cache.size>8)cache.clear();cache.set(key,result);return result;
   }
   async function page(root,path,number,fingerprint,format='png'){

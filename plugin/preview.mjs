@@ -1,3 +1,4 @@
+import {revealInFinder} from './src/finder.js';
 import {webPreviewService} from './src/web-preview.js';
 import {singleFileService} from './src/single-file.js';
 import {prepareReviewBatch} from './src/prepare-review-batch.js';
@@ -33,14 +34,18 @@ createServer(async(req,res)=>{
    else if(name==='choose_review_file'){const path=await chooseFile();data=path?await singleFiles.open({path}):{cancelled:true};}
    else if(name==='list_markdown_project')data=await workspace.list(a.folderPath);
    else if(name==='choose_markdown_project_folder'){const folder=await chooseFolder();data=folder ? await workspace.list(folder) : {cancelled:true};}
+   else if(name==='reveal_review_project_file')data=await revealInFinder(workspace,a.root,a.path);
    else if(name==='resolve_native_office_file')data=await workspace.nativeOfficePath(a.root,a.path);
    else if(name==='read_markdown_project_file')data=await workspace.read(a.root,a.path,a.ifNoneMatch);
+   else if(name==='rename_review_project_file'){data=await workspace.rename(a.root,a.path,a.name);await reviews.renamed(a.root,a.path,data.path);}
    else if(name==='move_review_project_file')data=await workspace.move(a.root,a.path,a.folder);
    else if(name==='save_review_project_file')data=await workspace.save(a.root,a.path,a.text,a.expectedEtag);
    else if(name==='read_latex_pdf')data=await latex.read(a.root,a.path,a.ifNoneMatch);
    else if(name==='render_latex_pdf_page')data=await latex.page(a.root,a.path,a.page,a.fingerprint,a.format ?? 'svg');
    else if(name==='locate_latex_pdf_selection')data=await latex.locate(a.root,a.path,a.selection);
    else if(name==='prepare_review_batch')data={entries:await prepareReviewBatch(a.entries,{reviews,workspace,latex})};
+   else if(name==='read_markatlas_pane'){await workspace.resolve(a.root,a.path);data={html:html.replace('<script>','<script>window.__markatlasPane='+JSON.stringify(a).replaceAll('<','\\u003c')+';')};}
+   else if(name==='review_project_state'){await workspace.resolve(a.root,'.');data=await reviews.project(a.root,a.state);}
    else if(name==='update_review_document')data=await reviews.update(a);
    else if(name==='generate_review_explanation'){const result=await generateExplanation({getClientCapabilities:()=>({})},await explanationSettings().read(),a.annotation);const record=await explanations.create(a.annotation);await explanations.answer(record.requestId,result.answer);data={requestId:record.requestId,status:'answered',...result};}
    else if(name==='create_markdown_explanation')data=await explanations.create(a.annotation);

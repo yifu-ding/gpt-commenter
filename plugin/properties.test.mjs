@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {EditorState} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
+import {renderMarkdown} from './src/markdown.js';
+import {liveMarkdown,revealBlock,markdownPreviewUnits} from './src/live-markdown.js';
+const dom=new JSDOM('<article id="document"></article><main></main>',{pretendToBeVisual:true});
+for(const name of ['window','document','MutationObserver','HTMLElement','Node'])globalThis[name]=dom.window[name];
+globalThis.requestAnimationFrame=window.requestAnimationFrame.bind(window);globalThis.cancelAnimationFrame=window.cancelAnimationFrame.bind(window);
+const text='---\ntitle: Obsidian 格式样例\naliases:\n  - Obsidian Markdown 示例\ntags: [obsidian, markdown]\ncssclasses:\n  - demo-note\ncreated: 2026-05-09\ncount: 0\nready: false\n---\n\n# Body';
+const el=document.querySelector('article');renderMarkdown(el,text,'rendered');assert.equal(el.querySelectorAll('dt').length,7);assert.deepEqual([...el.querySelectorAll('.metadata-tag')].map(n=>n.textContent),['obsidian','markdown']);assert.match(el.textContent,/2026-05-09/);assert.match(el.textContent,/0/);assert.match(el.textContent,/false/);assert.equal(el.querySelector('h1').textContent,'Body');
+renderMarkdown(el,'---\ntitle: "<img src=x onerror=alert(1)>"\n---','rendered');assert.equal(el.querySelector('img'),null);assert.match(el.textContent,/<img/);
+renderMarkdown(el,'---\ntags: [unclosed\n---','rendered');assert.ok(el.querySelector('.metadata pre'),'invalid YAML remains readable');
+const state=EditorState.create({doc:text,extensions:liveMarkdown()});const units=markdownPreviewUnits(state.doc);assert.equal(units[0].kind,'yaml');assert.equal(units.filter(u=>u.kind==='thematicBreak').length,0);
+const view=new EditorView({parent:document.querySelector('main'),state});assert.equal(view.dom.querySelectorAll('.metadata-properties').length,1);assert.equal(view.dom.querySelectorAll('dt').length,7);
+view.dispatch({selection:{anchor:text.indexOf('title')},effects:revealBlock.of(text.indexOf('title'))});assert.equal(view.dom.querySelector('.metadata-properties'),null);assert.match(view.dom.textContent,/title: Obsidian/);assert.ok(view.dom.querySelector('h1'));
+view.dispatch({selection:{anchor:text.indexOf('Body')},effects:revealBlock.of(text.indexOf('Body'))});assert.ok(view.dom.querySelector('.metadata-properties'));assert.equal(view.state.doc.toString(),text);
+view.destroy();dom.window.close();console.log('Properties types, tags, safe values, malformed YAML and editable frontmatter round-trip passed');

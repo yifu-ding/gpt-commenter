@@ -20,3 +20,5 @@ for(const p of [floatingPosition({left:1100,right:1200,top:750,bottom:790},340,5
  assert.ok(p.left>=12);assert.ok(p.top>=72);assert.ok(p.maxWidth>=0);assert.ok(p.maxHeight>=0);
 }
 console.log('Project-tree filtering and selection-anchored panel geometry checks passed');
+
+const large=buildProject([...Array.from({length:10050},(_,i)=>f(`Large/earlier/${i}.txt`)),f('Large/答辩ppt/slides.pptx'),f('Large/相关文献pdf/paper.pdf'),f('Large/答辩ppt/成果概述初稿/两页成果概述.md')]);assert.equal(large.files.size,10053);assert.equal(large.omitted,0);assert.ok(large.files.has('答辩ppt/slides.pptx'));assert.ok(large.files.has('相关文献pdf/paper.pdf'));
