@@ -149,9 +149,9 @@ registerAppTool(server,'update_review_document',{
 },async data=>{if(data.root)await workspace.resolve(data.root,'.');return {content:[],structuredContent:await reviews.update(data)};});
 registerAppTool(server,'review_project_state',{
   description:'Load or save project-local review queue and recovery drafts.',
-  inputSchema:{root:z.string(),state:z.object({entries:z.array(z.any()).max(500),drafts:z.record(z.any()),changedIdentities:z.array(z.string()).optional(),removedIds:z.array(z.string()).optional()}).optional()},
+  inputSchema:{root:z.string(),path:z.string().optional(),state:z.object({entries:z.array(z.any()).max(500),drafts:z.record(z.any()),changedIdentities:z.array(z.string()).optional(),removedIds:z.array(z.string()).optional()}).optional()},
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
-},async({root,state})=>{await workspace.resolve(root,'.');return {content:[],structuredContent:await reviews.project(root,state)};});
+},async({root,path,state})=>{await workspace.resolve(root,path || '.');if(path && state)throw Error('Nested project loading is read-only.');return {content:[],structuredContent:path?await reviews.nestedProject(root,path):await reviews.project(root,state)};});
 registerAppTool(server,'prepare_review_batch',{
   description:'Validate and refresh all queued review comments immediately before sending them together.',
   inputSchema:{entries:z.array(z.object({item:z.object({id:z.string().uuid()}).passthrough(),root:z.string().nullable().optional(),path:z.string().nullable().optional(),etag:z.string().nullable().optional()})).min(1).max(500)},

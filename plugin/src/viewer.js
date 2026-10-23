@@ -1,4 +1,4 @@
-import {mergeNotes} from './project-state.js';
+import {mergeNotes,mergeProjectState} from './project-state.js';
 import {createTreeToolbar} from './tree-toolbar.js';
 import {createEntryDialog} from './create-entry-dialog.js';
 import {applyThemeColor,syncRecentHistory,recentRootsKey} from './viewer-settings.js';
@@ -1288,6 +1288,13 @@ async function openProjectFile(path,sourceLine){
   }
   beginFileChange();const current=++incomingRevision;$('project-status').textContent=`Opening ${path}…`;
   try {
+    if(selectedProject.rootPath && !selectedProject.singleFile && path.includes('/')){
+      await flushProjectState();
+      const saved=await serverData('review_project_state',{root:selectedProject.rootPath,path});
+      if(current!==incomingRevision || selectedProject!==project)return;
+      const merged=mergeProjectState({entries:[...batchEntries],drafts:projectDrafts,removedIds:[...removedNoteIds]},{...saved,changedIdentities:[...new Set([...Object.keys(saved.drafts || {}),...(saved.entries || []).map(([,entry])=>entry.identity)])]});
+      projectDrafts=merged.drafts;batchEntries=new Map(merged.entries);removedNoteIds=new Set(merged.removedIds);renderBatch();
+    }
     if(isPdf(path)){
       if(!selectedProject.rootPath)throw Error('Open the folder containing this PDF to review it.');
       const result=await serverData('read_latex_pdf',{root:selectedProject.rootPath,path});

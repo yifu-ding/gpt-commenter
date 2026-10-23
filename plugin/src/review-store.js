@@ -1,7 +1,7 @@
 import {renamePaths} from './rename-paths.js';
 import {mergeProjectState} from './project-state.js';
 import {mkdir,writeFile,readFile,rename,lstat,realpath,readdir} from 'node:fs/promises';
-import {join} from 'node:path';
+import {join,dirname,relative,isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash,randomUUID} from 'node:crypto';
 const hash=text=>createHash('sha256').update(text).digest('hex');
@@ -29,6 +29,30 @@ export function reviewStore(base=process.env.PLUGIN_DATA || join(tmpdir(),'gpt-c
       }
     },
     async project(root,state){const directory=await projectDir(root);if(state!==undefined){const previousWork=projectWrites.get(directory)||Promise.resolve();const work=previousWork.catch(()=>{}).then(async()=>{let previous={entries:[],drafts:{}};try{previous=JSON.parse(await readFile(join(directory,'project.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}await put('project.json',mergeProjectState(previous,state),directory);return {saved:true};});projectWrites.set(directory,work);try{return await work;}finally{if(projectWrites.get(directory)===work)projectWrites.delete(directory);}}try{for(const name of await readdir(directory)){if(!/^[a-f0-9]{64}\.document\.json$/.test(name))continue;const record=JSON.parse(await readFile(join(directory,name),'utf8'));for(const note of record.annotations || [])await put(`${valid(note.id)}.json`,{documentId:record.documentId,directory});}return JSON.parse(await readFile(join(directory,"project.json"),"utf8"));}catch(e){if(e.code!=="ENOENT")throw e;return {entries:[],drafts:{}};}},
+    async nestedProject(root,path){
+      const actual=await realpath(root),target=await realpath(join(actual,path));
+      const rel=relative(actual,target);
+      if(rel==='..' || rel.startsWith('../') || isAbsolute(rel))throw Error('File is outside the project.');
+      let state=await this.project(actual);
+      const folders=[];for(let folder=dirname(target);folder!==actual;folder=dirname(folder))folders.unshift(folder);
+      for(const folder of folders){
+        const directory=join(folder,'.markatlas');
+        try{if((await lstat(directory)).isSymbolicLink())throw Error('Project metadata must not be a symbolic link.');}
+        catch(error){if(error.code==='ENOENT')continue;throw error;}
+        const prefix=relative(actual,folder).split('\\').join('/');
+        const rebase=value=>{
+          if(Array.isArray(value))return value.map(rebase);
+          if(!value || typeof value!=='object')return value;
+          const next=Object.fromEntries(Object.entries(value).map(([key,item])=>[key,rebase(item)]));
+          if(value.root===folder){next.root=actual;for(const key of ['path','main'])if(typeof value[key]==='string' && !isAbsolute(value[key]))next[key]=prefix+'/'+value[key];}
+          if(value.projectRoot===folder)next.projectRoot=actual;
+          return next;
+        };
+        const child=rebase(await this.project(folder));
+        state=mergeProjectState(state,{...child,changedIdentities:[...new Set([...Object.keys(child.drafts || {}),...(child.entries || []).map(([,entry])=>entry.identity)])]});
+      }
+      return state;
+    },
     async update({root,identity,sourcePath,sourceName,text,baseText,annotations,checkpointAnnotationId}) {
       const documentId=hash(identity),directory=root?await projectDir(root):dir;
       let previous;try{previous=JSON.parse(await readFile(join(directory,`${documentId}.document.json`),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
