@@ -1,3 +1,6 @@
+import {createTreeToolbar} from './tree-toolbar.js';
+import {createEntryDialog} from './create-entry-dialog.js';
+import {applyThemeColor,syncRecentHistory,recentRootsKey} from './viewer-settings.js';
 import {applyHostAccent} from './host-accent.js';
 import {createTreePreferences,appendGitBadge} from './tree-preferences.js';
 import {fitBreadcrumb} from './breadcrumb-layout.js';
@@ -956,6 +959,7 @@ window.addEventListener('pointermove',event=>{if(commentsDrag && event.pointerId
 function finishCommentsDrag(event){if(!commentsDrag || event.pointerId!==commentsDrag.id)return;commentsDrag=null;document.body.classList.remove('resizing-comments');saveCommentsWidth();}
 window.addEventListener('pointerup',finishCommentsDrag);window.addEventListener('pointercancel',finishCommentsDrag);
 commentsHandle.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const {min,max}=commentsWidthBounds();resizeComments(event.key==='Home'?min:event.key==='End'?max:commentsWidth()+(event.key==='ArrowLeft'?16:-16));saveCommentsWidth();});
+let viewerPreferences={themeColor:'host',showGitChanges:true},lastSettings=null,settingsRequest=null;
 let treeSide=localStorage.getItem('markatlas:tree-side')==='right'?'right':'left';
 let outlineSide=localStorage.getItem('markatlas:outline-side')==='right'?'right':'left';
 let preferredOutlineWidth=Number(localStorage.getItem('markatlas:outline-width'))||200,outlineDrag=null;
@@ -1103,20 +1107,20 @@ function renderProjectTree() {
     for(const node of treePreferences.sort(nodes)) {
       const row=document.createElement('li');list.append(row);
       if(node.type==='directory') {
-        const folder=document.createElement('details'),title=document.createElement('summary');folder.dataset.projectFolder=node.path;folder.open=expanded.has(node.path) || (treeAutoExpand && (node.path===breadcrumbFolder || !!breadcrumbFolder?.startsWith(`${node.path}/`) || !!activeProjectPath?.startsWith(`${node.path}/`)));title.textContent=node.name;appendGitBadge(title,node.git);if(node.path===breadcrumbFolder)title.dataset.breadcrumbActive='true';folder.append(title);row.append(folder);children(node.children,folder);
+        const folder=document.createElement('details'),title=document.createElement('summary');folder.dataset.projectFolder=node.path;folder.open=expanded.has(node.path) || (treeAutoExpand && (node.path===breadcrumbFolder || !!breadcrumbFolder?.startsWith(`${node.path}/`) || !!activeProjectPath?.startsWith(`${node.path}/`)));const label=document.createElement('span');label.className='file-label';label.textContent=node.name;title.append(label);if(viewerPreferences.showGitChanges)appendGitBadge(title,node.git);if(node.path===breadcrumbFolder)title.dataset.breadcrumbActive='true';folder.append(title);row.append(folder);children(node.children,folder);
       } else {
         const button=document.createElement('button');button.type='button';button.dataset.projectPath=node.path;button.setAttribute('aria-disabled',String(!node.supported));
         button.draggable=!!project.rootPath && !project.singleFile;
         button.title=node.deleted ? `${node.path} · Deleted file` : node.supported ? node.path : `${node.path} · Unsupported file type`;
         if(node.path===activeProjectPath)button.setAttribute('aria-current','page');
         const symbol=document.createElement('span');symbol.className='file-symbol';symbol.dataset.kind=isImage(node.name)?'image':isMarkdown(node.name)?'markdown':/\.svg$/i.test(node.name)?'vector':'code';symbol.setAttribute('aria-hidden','true');symbol.textContent=isImage(node.name)?'▧':isMarkdown(node.name)?'M↓':/\.svg$/i.test(node.name)?'▣':'#';
-        const name=document.createElement('span');name.className='file-label';name.textContent=node.name;button.append(symbol,name);appendGitBadge(button,node.git);row.append(button);
+        const name=document.createElement('span');name.className='file-label';name.textContent=node.name;button.append(symbol,name);if(viewerPreferences.showGitChanges)appendGitBadge(button,node.git);row.append(button);
       }
     }
   }
   const query=$('project-filter').value.trim().toLowerCase();
   function filtered(nodes){return nodes.flatMap(node=>{if(!showHiddenFiles && node.name.startsWith('.'))return [];if(node.type==='directory'){const children=filtered(node.children);return !query || children.length ? [{...node,children}] : [];}return node.path.toLowerCase().includes(query) ? [node] : [];});}
-  const summary=$('git-summary');summary.replaceChildren();summary.hidden=!project.git;if(project.git){summary.append('Git changes');appendGitBadge(summary,project.root.git || {added:0,removed:0});}
+  const summary=$('git-summary');summary.replaceChildren();summary.hidden=!project.git || !viewerPreferences.showGitChanges;if(project.git && viewerPreferences.showGitChanges){summary.append('Git changes');appendGitBadge(summary,project.root.git || {added:0,removed:0});}
   children(filtered(project.root.children),container);
   if(query && treeAutoExpand)container.querySelectorAll('details').forEach(node=>node.open=true);
 }
@@ -1137,6 +1141,31 @@ const locateTree=treeTool('tree-locate-file','Locate current file','M12 2v4m0 12
  button.scrollIntoView({block:'center',inline:'nearest'});button.focus({preventScroll:true});
 });
 
+let selectedCreationFolder=null;
+const entryDialog=createEntryDialog(async({root,folder,name,kind})=>{
+ const created=await serverData('create_review_project_entry',{root,folder,name,kind});
+ if(project?.rootPath!==root)return;
+ $('project-filter').value='';if(name.startsWith('.')){showHiddenFiles=true;updateHiddenFilesToggle();}
+ breadcrumbFolder=kind==='directory'?created.path:folder;treeAutoExpand=true;
+ try{await loadWorkspace();
+ if(kind==='file' && !/\.(pdf|png|apng|jpe?g|gif|webp|bmp|ico|avif|docx|xlsx|pptx|zip|bin)$/i.test(name))await openProjectFile(created.path);
+ }catch(error){showPdfError(new Error('Created successfully, but could not open it: '+error.message));}
+});
+const newFolder=treeTool('new-folder','New folder','M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v8m-4-4h8');
+treeToolButtons.insertBefore(newFolder,$('open-folder'));newFolder.addEventListener('click',()=>newTreeEntry('directory'));
+async function newTreeEntry(kind){
+ if(!project?.rootPath || project.singleFile)await openFolderDialog();
+ if(!project?.rootPath || project.singleFile)return;
+ const folder=selectedCreationFolder ?? breadcrumbFolder ?? (activeProjectPath?.includes('/')?activeProjectPath.slice(0,activeProjectPath.lastIndexOf('/')):'');
+ entryDialog.open({root:project.rootPath,folder,kind});
+}
+$('project-tree').addEventListener('click',event=>{
+ if(event.target.closest('input'))return;
+ const folder=event.target.closest('summary')?.parentElement;
+ if(folder){selectedCreationFolder=folder.dataset.projectFolder;return;}
+ const file=event.target.closest('[data-project-path]');if(file){const path=file.dataset.projectPath;selectedCreationFolder=path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';}
+});
+$('project-toggle').addEventListener('click',()=>{selectedCreationFolder='';});
 let treeOpenTimer;
 $('project-tree').addEventListener('click',event=>{if(event.target.closest('input'))return;const button=event.target.closest('[data-project-path]');if(!button)return;clearTimeout(treeOpenTimer);if(event.detail===0){if(button.getAttribute('aria-disabled')!=='true')openProjectFile(button.dataset.projectPath);return;}if(event.detail<2)treeOpenTimer=setTimeout(()=>{if(button.getAttribute('aria-disabled')!=='true')openProjectFile(button.dataset.projectPath);},500);});
 $('project-tree').addEventListener('dblclick',()=>clearTimeout(treeOpenTimer),true);
@@ -1168,7 +1197,7 @@ async function applyTreeRename({root,from,to}){
     if(next!==key){try{localStorage.setItem(next,JSON.stringify(map.rewrite(JSON.parse(localStorage.getItem(key)))));localStorage.removeItem(key);}catch{}}
   }
   const changed=map.path(activeProjectPath)!==activeProjectPath;
-  activeProjectPath=map.path(activeProjectPath);fileName=map.path(fileName);sourcePath=map.absolute(sourcePath);identity=map.identity(identity);breadcrumbFolder=map.path(breadcrumbFolder);
+  activeProjectPath=map.path(activeProjectPath);fileName=map.path(fileName);sourcePath=map.absolute(sourcePath);identity=map.identity(identity);breadcrumbFolder=map.path(breadcrumbFolder);selectedCreationFolder=map.path(selectedCreationFolder);
   items=map.rewrite(items);linkedPdf=map.rewrite(linkedPdf);
   if(changed){fileRefresh.stop();clearTimeout(pdfPoll);pdfDocument=map.rewrite(pdfDocument);currentEtag=null;}
   project=await serverData('list_markdown_project',{folderPath:root});
@@ -1290,7 +1319,6 @@ async function serverData(name,args={}) {
   if(!result.structuredContent)throw Error('Project data is unavailable.');
   return result.structuredContent;
 }
-const recentRootsKey='markatlas:recent-projects:v1';
 let recentRoots=[];try{recentRoots=JSON.parse(localStorage.getItem(recentRootsKey)||'[]').filter(root=>typeof root==='string').slice(0,10);}catch{}
 function renderRecentRoots(){const node=$('recent-projects');node.replaceChildren();node.hidden=!!project || !!fileName || !recentRoots.length;if(node.hidden)return;const heading=document.createElement('p');heading.textContent='Recently opened';node.append(heading);for(const root of recentRoots){const button=document.createElement('button');button.textContent=root.split('/').filter(Boolean).at(-1)||root;button.title=root;button.setAttribute('aria-label',`Open recent project ${button.textContent}`);button.addEventListener('click',async()=>{try{if(!await canLeaveFile())return;const tree=await serverData('list_markdown_project',{folderPath:root});if(await acceptWorkspace(tree,{selectDefault:true}))connectedFolder=tree.rootPath;}catch(error){$('project-status').hidden=false;$('project-status').textContent=error.message;}});node.append(button);}}
 function rememberRoot(root){if(!root)return;recentRoots=[root,...recentRoots.filter(value=>value!==root)].slice(0,10);try{localStorage.setItem(recentRootsKey,JSON.stringify(recentRoots));}catch{}renderRecentRoots();}
@@ -1305,10 +1333,10 @@ async function acceptWorkspace(tree,{selectDefault=false,allowDefault=true}={}) 
   const initial=!project;
   const changed=project && (project.rootPath!==tree.rootPath || !!project.singleFile!==!!tree.singleFile || (tree.singleFile && project.singlePath!==tree.singlePath));
   if(changed && !(await canLeaveFile()))return false;
-  if(changed){treeAutoExpand=true;await flushProjectState();dirtyIdentities.clear();projectDrafts={};linkedPdf=null;currentEtag=null;clearWorkspaceDocument();breadcrumbFolder=null;$('project-filter').value='';$('project-tree').replaceChildren();}
+  if(changed){selectedCreationFolder=null;treeAutoExpand=true;await flushProjectState();dirtyIdentities.clear();projectDrafts={};linkedPdf=null;currentEtag=null;clearWorkspaceDocument();breadcrumbFolder=null;$('project-filter').value='';$('project-tree').replaceChildren();}
   if(project && !changed)Object.assign(project,tree);else project=tree;
   if((initial || changed) && !tree.singleFile){try{const saved=await serverData('review_project_state',{root:tree.rootPath});projectDrafts=saved.drafts || {};for(const [key,draft] of Object.entries(projectDrafts)){const prefix='project:'+tree.rootPath.replace(/\/+$/,'')+'/';if(!key.startsWith(prefix))continue;for(const item of draft.items || [])if(item.kind==='explanation' && !removedNoteIds.has(item.id))batchEntries.set(item.id,{identity:key,root:tree.rootPath,path:key.slice(prefix.length),item});}for(const [id,entry] of saved.entries || [])if(entryRoot(entry)===normalizedRoot(tree.rootPath))batchEntries.set(id,entry);}catch(error){updateStatus(`Cannot load project notes: ${error.message}`);}}
-  if(!tree.singleFile)rememberRoot(tree.rootPath);
+  if(!tree.singleFile && (initial || changed || selectDefault))rememberRoot(tree.rootPath);
   $('project-status').hidden=true;$('project-status').textContent='';
   renderBreadcrumb();renderProjectTree();renderBatch();
   // Only choose a default when connecting a folder, never on focus/tree refresh.
@@ -1349,7 +1377,7 @@ async function openFileDialog(){
   finally{choosingFile=false;}
 }
 $('open-file-action').addEventListener('click',openFileDialog);
-$('open-single-file').addEventListener('click',openFileDialog);
+$('open-single-file').addEventListener('click',()=>newTreeEntry('file'));
 $('open-folder-action').addEventListener('click',()=>{setOpenMenu(false);openFolderDialog();});
 document.addEventListener('click',e=>{if(!e.target.closest?.('.open-control') && !e.target.closest?.('#project-toggle'))setOpenMenu(false);});
 $('open-menu').addEventListener('keydown',e=>{
@@ -1390,15 +1418,38 @@ function watchResource(uri,text) {
 window.addEventListener('focus',()=>{loadWorkspace();fileRefresh.check();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){loadWorkspace();fileRefresh.check();}});
 window.addEventListener('pagehide',()=>{clearTimeout(pdfPoll);persist();saveCode();if(syncTimer!==null){clearTimeout(syncTimer);syncTimer=null;syncAnnotations().catch(()=>{});}fileRefresh.stop();});
+let lastAccentContext=null;
 function applyHostContext(context) {
-  applyHostAccent(context);
+  if(context?.styles?.variables)lastAccentContext=context;
+  document.documentElement.style.removeProperty('--markatlas-accent');document.documentElement.style.removeProperty('--markatlas-accent-soft');
+  applyHostAccent(lastAccentContext || context);
+  applyThemeColor(viewerPreferences.themeColor,context);
   $('inline-mode').textContent=context?.displayMode==='inline'?'Expand view':'Inline view';
   if(['light','dark'].includes(context?.theme)){document.documentElement.dataset.theme=context.theme;document.querySelectorAll('.markdown-rendered').forEach(el=>{el.classList.toggle('theme-dark',context.theme==='dark');el.classList.toggle('theme-light',context.theme==='light');});}
 
 }
+async function refreshViewerSettings(){
+ if(settingsRequest)return settingsRequest;
+ settingsRequest=(async()=>{try{
+  const result=await serverData('markatlas_settings_read');if(!result?.values)return;
+  const values=result.preferences || result.values;
+  if(['left','right'].includes(values.treePosition) && (!lastSettings || values.treePosition!==lastSettings.treePosition))treeSide=values.treePosition;
+  if(['left','right'].includes(values.outlinePosition) && (!lastSettings || values.outlinePosition!==lastSettings.outlinePosition))outlineSide=values.outlinePosition;
+  viewerPreferences={themeColor:values.themeColor || 'host',showGitChanges:values.showGitChanges!==false};
+  const changed=JSON.stringify(lastSettings)!==JSON.stringify(values);lastSettings={...values};
+  if(syncRecentHistory(localStorage,result.recentHistoryRevision)){recentRoots=[];renderRecentRoots();}
+  if(changed){applyHostContext(app.getHostContext());renderProjectTree();updateLayout();codeEditor.measure();positionComposer();}
+ }catch(error){console.warn('MarkAtlas settings unavailable:',error.message);}finally{settingsRequest=null;}})();return settingsRequest;
+}
+window.addEventListener('focus',()=>{refreshViewerSettings();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshViewerSettings();});
+window.addEventListener('storage',event=>{if(event.key===recentRootsKey){try{recentRoots=JSON.parse(event.newValue||'[]');renderRecentRoots();}catch{}}});
+const settingsPoll=setInterval(()=>{if(!document.hidden)refreshViewerSettings();},3000);
+window.addEventListener('pagehide',()=>clearInterval(settingsPoll));
 app.onhostcontextchanged = context=>{applyHostContext(context);loadWorkspace();};
+createTreeToolbar(treeToolButtons);
 setProjectOpen(true);
-app.connect().then(async()=>{applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
+app.connect().then(async()=>{await refreshViewerSettings();applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
 
 // Capture before editor and host bubbling shortcuts. Each pane handles its own focus.
 window.addEventListener('keydown',event=>{

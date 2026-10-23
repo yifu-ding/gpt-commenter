@@ -82,6 +82,17 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
       if(ifNoneMatch===etag)return {name:path,etag,notModified:true};
       return {name:path,...fileContent(path,await readFile(target)),etag};
     },
+    async create(root,folder,name,kind='file') {
+      await roots();
+      if(!allowed.includes(root) && !connected.has(root))throw Error('Open a project folder before creating files or folders.');
+      if(!name.trim() || name==='.' || name==='..' || /[\\/\0]/.test(name) || ignored.has(name))throw Error('Enter a valid file or folder name.');
+      if(!['file','directory'].includes(kind) || isAbsolute(folder) || folder.split('/').includes('..'))throw Error('Choose a folder inside the project.');
+      const parent=await inside(root,folder || '.');if(!(await stat(parent)).isDirectory())throw Error('Choose a folder.');
+      const target=join(parent,name);
+      try{if(kind==='directory')await mkdir(target);else{const handle=await open(target,'wx');await handle.close();}}
+      catch(error){if(error.code==='EEXIST')throw Error('A file or folder with that name already exists.');throw error;}
+      return {path:relative(root,target),kind};
+    },
     async rename(root,path,name) {
       await roots();
       if(!allowed.includes(root) && !connected.has(root))throw Error('Open a project folder before renaming.');

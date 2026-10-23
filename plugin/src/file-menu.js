@@ -18,7 +18,7 @@ export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPre
     });
     input.addEventListener('blur',()=>{if(!input.disabled)cancel();});input.focus();input.select();
   }
-  tree.addEventListener('dblclick',event=>{const target=event.target.closest('[data-project-path],summary');if(!target || event.target.closest('input'))return;event.preventDefault();event.stopPropagation();startRename(target);});
+  tree.addEventListener('dblclick',event=>{const label=event.target.closest('.file-label');if(!label || event.target.closest('input'))return;const target=label.closest('[data-project-path],summary');if(!target || !tree.contains(target))return;event.preventDefault();event.stopPropagation();startRename(target);});
   const buttons=[...menu.querySelectorAll('button')];
   function close(restoreFocus=false){menu.hidden=true;if(restoreFocus)opener?.focus({preventScroll:true});selected=null;}
   async function copy(text){

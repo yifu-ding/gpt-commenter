@@ -13,7 +13,7 @@ import {latexService} from './src/latex.js';
 import {reviewStore} from './src/review-store.js';
 import {explanationStore} from './src/explanations.js';
 import {generateExplanation} from './src/background-explanation.js';
-import {explanationSettings} from './src/explanation-settings.js';
+import {explanationSettings,settingsSchema,settingsLayout,presentSettings} from './src/explanation-settings.js';
 const base=fileURLToPath(new URL('.',import.meta.url)),root=resolve(process.argv[2] || process.cwd());
 const chooseFolder=createFolderPicker({bundle:join(base,'dist/FolderPicker.app')}),chooseFile=createFolderPicker({mode:'file',bundle:join(base,'dist/FolderPicker.app')});
 const workspace=workspaceAccess(async()=>[{uri:new URL('file://'+root).href}]),latex=latexService(workspace),reviews=reviewStore(join(tmpdir(),'commenter-latex-state')),explanations=explanationStore(join(tmpdir(),'commenter-latex-state'));
@@ -29,7 +29,8 @@ createServer(async(req,res)=>{
   res.setHeader('Content-Type','application/json');
   if(req.url==='/message'){writeFileSync(join(tmpdir(),'latex-preview-message.json'),body);res.end('{}');return;}
   try{const {name,arguments:a}=JSON.parse(body);let data;
-   if(name==='open_html_web_preview')data=await webPreviews.open(a.root,a.path);
+   if(name==='markatlas_settings_read')data={...presentSettings(await explanationSettings().read()),recentHistoryRevision:await explanationSettings().historyRevision()};
+   else if(name==='open_html_web_preview')data=await webPreviews.open(a.root,a.path);
    else if(name==='open_review_single_file')data=await singleFiles.open(a);
    else if(name==='choose_review_file'){const path=await chooseFile();data=path?await singleFiles.open({path}):{cancelled:true};}
    else if(name==='list_markdown_project')data=await workspace.list(a.folderPath);
@@ -37,6 +38,7 @@ createServer(async(req,res)=>{
    else if(name==='reveal_review_project_file')data=await revealInFinder(workspace,a.root,a.path);
    else if(name==='resolve_native_office_file')data=await workspace.nativeOfficePath(a.root,a.path);
    else if(name==='read_markdown_project_file')data=await workspace.read(a.root,a.path,a.ifNoneMatch);
+   else if(name==='create_review_project_entry')data=await workspace.create(a.root,a.folder,a.name,a.kind);
    else if(name==='rename_review_project_file'){data=await workspace.rename(a.root,a.path,a.name);await reviews.renamed(a.root,a.path,data.path);}
    else if(name==='move_review_project_file')data=await workspace.move(a.root,a.path,a.folder);
    else if(name==='save_review_project_file')data=await workspace.save(a.root,a.path,a.text,a.expectedEtag);

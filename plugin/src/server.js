@@ -13,7 +13,7 @@ import {z} from 'zod';
 import {createFolderPicker} from './folder-picker.js';
 import {workspaceAccess} from './workspace.js';
 import {explanationStore} from './explanations.js';
-import {explanationSettings,settingsSchema} from './explanation-settings.js';
+import {explanationSettings,settingsSchema,settingsLayout,presentSettings,normalizeSettingLabels} from './explanation-settings.js';
 import {generateExplanation} from './background-explanation.js';
 
 const UI_URI = 'ui://gpt-commenter/markdown-viewer-v3';
@@ -127,6 +127,11 @@ registerAppTool(server,'move_review_project_file',{
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false}
 },async({root,path,folder})=>({content:[],structuredContent:await workspace.move(root,path,folder)}));
 const reviews=reviewStore();
+registerAppTool(server,'create_review_project_entry',{
+  description:'Create an empty file or folder inside a connected project without overwriting existing entries. File names and extensions are preserved exactly.',
+  inputSchema:{root:z.string(),folder:z.string(),name:z.string(),kind:z.enum(['file','directory'])},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+},async({root,folder,name,kind})=>({content:[],structuredContent:await workspace.create(root,folder,name,kind)}));
 registerAppTool(server,'rename_review_project_file',{
   description:'Rename a file or folder in the connected project without replacing an existing entry.',
   inputSchema:{root:z.string(),path:z.string(),name:z.string()},
@@ -172,10 +177,26 @@ const explanationPreferences=explanationSettings();
 server.server.registerCapabilities({experimental:{'openai/settings':{readTool:'markatlas_settings_read',updateTool:'markatlas_settings_update'}}});
 server.registerTool('markatlas_settings_read',{
   title:'MarkAtlas settings',inputSchema:{},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
-},async()=>({content:[],structuredContent:{schema:settingsSchema,values:await explanationPreferences.read()}}));
+},async()=>({content:[],structuredContent:{...presentSettings(await explanationPreferences.read()),recentHistoryRevision:await explanationPreferences.historyRevision()}}));
 server.registerTool('markatlas_settings_update',{
-  title:'Update MarkAtlas settings',inputSchema:{set:z.object({explanationModel:z.enum(['gpt-6-luna','gpt-6.1-sol','gpt-6-astra']).optional()}).strict()},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
-},async({set})=>({content:[],structuredContent:{values:await explanationPreferences.update(set)}}));
+  title:'Update MarkAtlas settings',inputSchema:{set:z.object({explanationModel:z.enum(settingsSchema.properties.explanationModel.enum).optional(),treePosition:z.enum(['Left','Right','left','right']).optional(),themeColor:z.enum(settingsSchema.properties.themeColor.enum).optional(),showGitChanges:z.boolean().optional(),outlinePosition:z.enum(['Left','Right','left','right']).optional()}).strict()},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+},async({set})=>({content:[],structuredContent:presentSettings(await explanationPreferences.update(normalizeSettingLabels(set)))}));
+const THEME_COLOR_URI='ui://gpt-commenter/theme-color';
+registerAppResource(server,'Theme color',THEME_COLOR_URI,{},async()=>({contents:[{uri:THEME_COLOR_URI,mimeType:RESOURCE_MIME_TYPE,text:readFileSync(new URL('../src/theme-color.html',here),'utf8').replace('/* SCRIPT */',()=>readFileSync(new URL('./theme-color.js',here),'utf8'))}]}));
+registerAppTool(server,'markatlas_theme_color',{
+ title:'Theme color…',description:'Choose a theme color with a color sample. Host follows the host accent.',inputSchema:{},
+ annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:{ui:{resourceUri:THEME_COLOR_URI}}
+},async()=>({content:[],structuredContent:{status:'ready'}}));
+const CLEAR_HISTORY_URI='ui://gpt-commenter/clear-recent-history';
+registerAppResource(server,'Clear recently opened',CLEAR_HISTORY_URI,{},async()=>({contents:[{uri:CLEAR_HISTORY_URI,mimeType:RESOURCE_MIME_TYPE,text:readFileSync(new URL('../src/clear-history.html',here),'utf8').replace('/* SCRIPT */',()=>readFileSync(new URL('./clear-history.js',here),'utf8'))}]}));
+registerAppTool(server,'markatlas_clear_recently_opened',{
+ title:'Clear recently opened…',description:'Open a confirmation dialog to clear only the file tree recently opened history. Keeps comments, drafts and other caches.',inputSchema:{},
+ annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:{ui:{resourceUri:CLEAR_HISTORY_URI}}
+},async()=>({content:[],structuredContent:{status:'confirmation_required'}}));
+registerAppTool(server,'markatlas_confirm_clear_recently_opened',{
+ title:'Confirm clearing recently opened',inputSchema:{confirmed:z.literal(true)},
+ annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false},_meta:{ui:{visibility:['app']}}
+},async()=>({content:[],structuredContent:{recentHistoryRevision:await explanationPreferences.clearRecentHistory()}}));
 registerAppTool(server,'generate_review_explanation',{
   description:'Explain a selection using host sampling or a fresh background Codex conversation, then return the answer to the viewer.',
   inputSchema:{annotation:z.object({id:z.string(),selectedText:z.string().max(50000),sourceName:z.string(),startLine:z.number().int(),endLine:z.number().int(),detail:z.enum(['short','medium','long'])}).passthrough()},

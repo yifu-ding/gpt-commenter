@@ -3,11 +3,11 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {generateExplanation} from './src/background-explanation.js';
-import {explanationSettings} from './src/explanation-settings.js';
+import {explanationSettings,defaults} from './src/explanation-settings.js';
 const base=await mkdtemp(join(tmpdir(),'markatlas-settings-'));
 try{
  const store=explanationSettings(base);
- assert.deepEqual(await store.read(),{explanationModel:'gpt-6-luna'});
+ assert.deepEqual(await store.read(),defaults);
  await store.update({explanationModel:'gpt-6.1-sol'});
  assert.equal((await explanationSettings(base).read()).explanationModel,'gpt-6.1-sol');
  await assert.rejects(()=>store.update({explanationModel:'invalid'}));
