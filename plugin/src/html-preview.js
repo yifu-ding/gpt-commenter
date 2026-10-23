@@ -110,7 +110,7 @@ export function htmlPreviewDocument(source,baseURL,channel){
   const {tree,records}=htmlTextRecords(source);
   let html=serialize(tree);
   const safe=value=>JSON.stringify(value).replace(/</g,'\\u003c');
-  const style='<style>#atlas-comment{position:fixed;z-index:2147483647;border:1px solid #ded6e8;border-radius:999px;padding:6px 12px;background:white;color:#514060;font:12px system-ui;cursor:pointer}#atlas-comment[hidden]{display:none}::highlight(atlas-notes){background:#ffeaa484;text-decoration:underline #d8a82c 2px}::highlight(atlas-active){background:#b9d9f5c9;text-decoration:underline #3979b8 2px}</style>';
+  const style='<style>#atlas-comment{position:fixed;z-index:2147483647;border:1px solid #ded6e8;border-radius:999px;padding:6px 12px;background:white;color:#514060;font:12px system-ui;cursor:pointer}#atlas-comment[hidden]{display:none}::highlight(atlas-notes){background:transparent;text-decoration:underline #888 2px}::highlight(atlas-active){background:transparent;text-decoration:underline #444 2px}</style>';
   html=html.replace('<head>',`<head>${baseURL?`<base href="${baseURL.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">`:''}${style}`);
   return html.replace('</body>',`<script>${canvasRuntime.replace(/<\/script/gi,'<\\/script')}</script><script>(${frameRuntime.toString()})(${safe(records)},${safe(channel)},${source.length})</script></body>`);
 }

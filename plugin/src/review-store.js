@@ -1,18 +1,37 @@
-import {mkdir,writeFile,readFile,rename} from 'node:fs/promises';
+import {renamePaths} from './rename-paths.js';
+import {mergeProjectState} from './project-state.js';
+import {mkdir,writeFile,readFile,rename,lstat,realpath,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash,randomUUID} from 'node:crypto';
 const hash=text=>createHash('sha256').update(text).digest('hex');
 const excerpt=text=>Array.from(text).length>180 ? `${Array.from(text).slice(0,88).join('')} … ${Array.from(text).slice(-89).join('')}` : text;
 export function reviewStore(base=process.env.PLUGIN_DATA || join(tmpdir(),'gpt-commenter-data')) {
-  const dir=join(base,'review-documents');
+  const dir=join(base,'review-documents'),projectWrites=new Map();
   const valid=id=>{if(!/^[\da-f-]{36}$/i.test(id))throw Error('Invalid annotation ID.');return id;};
-  async function put(name,data){await mkdir(dir,{recursive:true,mode:0o700});const target=join(dir,name),temp=`${target}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(data),{mode:0o600});await rename(temp,target);}
-  async function document(id){const pointer=JSON.parse(await readFile(join(dir,`${valid(id)}.json`),'utf8'));return JSON.parse(await readFile(join(dir,`${pointer.documentId}.document.json`),'utf8'));}
+  async function projectDir(root){const actual=await realpath(root),target=join(actual,'.markatlas');try{if((await lstat(target)).isSymbolicLink())throw Error('Project metadata must not be a symbolic link.');}catch(e){if(e.code!=='ENOENT')throw e;}await mkdir(target,{recursive:true,mode:0o700});return target;}
+  async function put(name,data,directory=dir){await mkdir(directory,{recursive:true,mode:0o700});const target=join(directory,name),temp=`${target}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(data),{mode:0o600});await rename(temp,target);}
+  async function document(id){const pointer=JSON.parse(await readFile(join(dir,`${valid(id)}.json`),'utf8'));return JSON.parse(await readFile(join(pointer.directory || dir,`${pointer.documentId}.document.json`),'utf8'));}
   return {
-    async update({identity,sourcePath,sourceName,text,baseText,annotations,checkpointAnnotationId}) {
-      const documentId=hash(identity);
-      let previous;try{previous=JSON.parse(await readFile(join(dir,`${documentId}.document.json`),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
+    async renamed(root,from,to){
+      const directory=await projectDir(root);await projectWrites.get(directory);
+      const {rewrite,identity}=renamePaths(root,from,to);
+      for(const name of await readdir(directory)){
+        if(name!=='project.json' && !/^[a-f0-9]{64}\.document\.json$/.test(name))continue;
+        const old=JSON.parse(await readFile(join(directory,name),'utf8')),data=rewrite(old);
+        if(name==='project.json'){await put(name,data,directory);continue;}
+        if(data.sourcePath===old.sourcePath)continue;
+        const prefix=['project:','pdf:','latex:'].find(prefix=>hash(prefix+old.sourcePath)===old.documentId) || (old.annotations?.some(n=>n.pdf)?'pdf:':'project:');
+        data.documentId=hash(identity(prefix+old.sourcePath));await put(data.documentId+'.document.json',data,directory);
+        for(const note of data.annotations || [])await put(`${valid(note.id)}.json`,{documentId:data.documentId,directory});
+        // Keep the old record consistent too, so rebuilding pointers cannot restore stale paths.
+        await put(name,data,directory);
+      }
+    },
+    async project(root,state){const directory=await projectDir(root);if(state!==undefined){const previousWork=projectWrites.get(directory)||Promise.resolve();const work=previousWork.catch(()=>{}).then(async()=>{let previous={entries:[],drafts:{}};try{previous=JSON.parse(await readFile(join(directory,'project.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}await put('project.json',mergeProjectState(previous,state),directory);return {saved:true};});projectWrites.set(directory,work);try{return await work;}finally{if(projectWrites.get(directory)===work)projectWrites.delete(directory);}}try{for(const name of await readdir(directory)){if(!/^[a-f0-9]{64}\.document\.json$/.test(name))continue;const record=JSON.parse(await readFile(join(directory,name),'utf8'));for(const note of record.annotations || [])await put(`${valid(note.id)}.json`,{documentId:record.documentId,directory});}return JSON.parse(await readFile(join(directory,"project.json"),"utf8"));}catch(e){if(e.code!=="ENOENT")throw e;return {entries:[],drafts:{}};}},
+    async update({root,identity,sourcePath,sourceName,text,baseText,annotations,checkpointAnnotationId}) {
+      const documentId=hash(identity),directory=root?await projectDir(root):dir;
+      let previous;try{previous=JSON.parse(await readFile(join(directory,`${documentId}.document.json`),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
       let checkpointText=previous?.checkpointText ?? baseText;
       const editUnits=previous?.editUnits || [];
       if(checkpointAnnotationId){
@@ -26,8 +45,8 @@ export function reviewStore(base=process.env.PLUGIN_DATA || join(tmpdir(),'gpt-c
         checkpointText=text;
       }
       const record={documentId,sourcePath,sourceName,text,baseText,documentHash:hash(text),diskHash:hash(baseText),checkpointText,editUnits:editUnits.slice(-100),annotations,updatedAt:new Date().toISOString()};
-      await put(`${documentId}.document.json`,record);
-      for(const item of annotations)await put(`${valid(item.id)}.json`,{documentId});
+      await put(`${documentId}.document.json`,record,directory);
+      for(const item of annotations)await put(`${valid(item.id)}.json`,{documentId,directory});
       return {documentId};
     },
     async resolve(id,{fullSelection=false}={}) {

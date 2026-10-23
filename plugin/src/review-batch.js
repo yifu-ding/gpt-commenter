@@ -23,7 +23,7 @@ export function reviewBatchContent(entries,{startNumber=0,attachments=false}={})
         if(item.html?.mapping && item.html.mapping!=='exact')location+=' · visual reference; verify source context';
         if(p?.region)location+=` · region (PDF points): ${JSON.stringify(p.region)}`;
         const quote=!root && !p && !word?item.selectedText:excerpt(item.selectedText);
-        content.push({type:'text',text:`${number}. ${location}${quote?`\n> ${quote}`:''}\nComment: ${item.message}${screenshot?`\nScreenshot for Annotation ${number}:`:''}`});
+        content.push({type:'text',text:`${number}. ${location}${quote?`\n> ${quote}`:''}${item.diskContext?`\nDisk updated since review. Original quote retained; ${item.diskContext.matched?'quote located in current file':'location is uncertain; reconcile before editing'}.\nCurrent disk context:\n${item.diskContext.context}`:''}\nComment: ${item.message}${screenshot?`\nScreenshot for Annotation ${number}:`:''}`});
         units.push({...content.at(-1),_meta:{'openai/title':`Comment ${number} · ${location}`}});
         if(screenshot){const match=/^data:(image\/(?:jpeg|png));base64,(.+)$/s.exec(screenshot);if(!match)throw Error(`Invalid screenshot for Annotation ${number}.`);content.push({type:'image',mimeType:match[1],data:match[2]});units.push({...content.at(-1),_meta:{'openai/title':`Screenshot for comment ${number}`}});}
       }

@@ -229,3 +229,5 @@ plugin/node_modules/
 .DS_Store
 /releases/
 /submission/tmp/
+
+.markatlas/

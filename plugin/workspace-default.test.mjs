@@ -14,7 +14,7 @@ window.root='/initial';window.names=['README.MD','README.txt','other.md'];window
 const source=readFileSync(new URL('./src/viewer.js',import.meta.url),'utf8')
 .replace("import {App} from '@modelcontextprotocol/ext-apps';",`class App {
  constructor(){window.app=this;} addEventListener(){} async connect(){} getHostContext(){return {};}
- async callServerTool({name,arguments:a}){
+ async callServerTool({name,arguments:a}){if(name==='review_project_state')return {structuredContent:{entries:[],drafts:{},saved:true}};
   let data;
   if(name==='choose_markdown_project_folder' || name==='list_markdown_project'){
    data={rootPath:window.root,root:{name:'Project',children:[{type:'directory',name:'docs',path:'docs',children:[{type:'file',name:'README.md',path:'docs/README.md'}]},...window.names.map(name=>({type:'file',name,path:name,supported:true}))]}};
@@ -33,7 +33,7 @@ try{
  window.eval(bundle.outputFiles[0].text);
  await until(()=>$('filename').textContent==='README.MD');
  assert.equal(window.reads.length,1,'opening a workspace reads only its root README');
- assert.equal($('document').querySelector('h1').textContent,'README.MD');
+ assert.match($('document').textContent,/README\.MD/);assert.equal($('document').querySelector('.cm-content').getAttribute('contenteditable'),'true');
  assert.equal($('project-drawer').hidden,false);
  $('project-tree').querySelector('[data-project-path="other.md"]').click();await until(()=>$('filename').textContent==='other.md');
  window.dispatchEvent(new window.Event('focus'));await new Promise(r=>setTimeout(r,30));

@@ -1,0 +1,32 @@
+import {tableColumnWidths} from './src/table-layout.js';
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {EditorState} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
+const dom=new JSDOM('<!doctype html><main></main>',{pretendToBeVisual:true});
+for(const name of ['window','document','MutationObserver','HTMLElement','Node'])globalThis[name]=dom.window[name];
+globalThis.requestAnimationFrame=dom.window.requestAnimationFrame.bind(dom.window);globalThis.cancelAnimationFrame=dom.window.cancelAnimationFrame.bind(dom.window);
+const {liveMarkdown,revealBlock,markdownPreviewUnits}=await import('./src/live-markdown.js');
+const widths=tableColumnWidths([['ID','Description'],['1','Long detailed content '.repeat(12)]]);assert.ok(widths[1]>widths[0]*3);assert.ok(Math.abs(widths.reduce((a,b)=>a+b,0)-100)<.001);
+const text='# Heading\n\n- First **bold** item\n- Second item\n  - Nested item\n- Last item\n\n| Name | Value |\n| --- | --- |\n| Alpha | One |\n| Beta | Two |\n\nParagraph line one\nparagraph line two\nparagraph line three';
+const view=new EditorView({parent:document.querySelector('main'),state:EditorState.create({doc:text,extensions:liveMarkdown()})});
+const widgets=()=>[...view.dom.querySelectorAll('.cm-markdown-preview')];
+const atLine=n=>widgets().find(node=>+node.dataset.sourceFrom===view.state.doc.line(n).from);
+assert.ok(atLine(3));assert.ok(atLine(4));assert.ok(atLine(5));assert.equal(atLine(5).querySelectorAll('.cm-list-indent-guide').length,1);assert.equal(atLine(3).querySelectorAll('.cm-list-indent-guide').length,0);assert.equal(atLine(8).querySelector('col').style.width,'50%');assert.equal(atLine(8).querySelector('table').style.width,'');assert.equal(atLine(5).querySelector('li').textContent,'Nested item');
+const before=view.dom.innerHTML;atLine(4).dispatchEvent(new window.MouseEvent('pointerenter',{bubbles:false}));assert.equal(view.dom.innerHTML,before,'hover changes neither decorations nor selection');
+atLine(4).dispatchEvent(new window.MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0}));assert.equal(view.state.doc.lineAt(view.state.selection.main.head).number,4);assert.equal(atLine(4),undefined);assert.ok(atLine(3));assert.ok(atLine(5));assert.ok(atLine(6));
+assert.equal(atLine(10).querySelector('thead'),null);assert.equal(atLine(10).querySelector('td').textContent,'Alpha');
+atLine(10).dispatchEvent(new window.MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0}));assert.equal(atLine(10),undefined);assert.ok(atLine(8));assert.ok(atLine(11));assert.ok(atLine(4),'previous line returns to preview');
+const line=view.state.doc.line(14);view.dispatch({selection:{anchor:line.from+2},effects:revealBlock.of(line.from+2)});assert.ok(atLine(13));assert.ok(atLine(15));assert.equal(atLine(14),undefined);
+view.dispatch({changes:{from:line.to,insert:' edited'}});assert.match(view.state.doc.toString(),/paragraph line two edited/);assert.ok(atLine(15));
+const nested=EditorState.create({doc:'- [ ] Parent\n    - Bullet\n      - [ ] Deep task\n- [ ] Next'});
+assert.deepEqual(markdownPreviewUnits(nested.doc).map(unit=>unit.depth),[0,1,2,0],'semantic list depth is independent of source indentation width');
+view.destroy();
+for(const indent of ['\t','  ']){
+ const codeText=['- incremental 数据：',indent+'```sh',indent+'/home/dyf/miniconda/envs/qec/bin/python test_result.py '+String.fromCharCode(92),indent+'    --dataset zuchongzhi '+String.fromCharCode(92),indent+'    --figure-name zcz_incremental.png',indent+'```','- 真实数据 加 `--zuchongzhi-mode real`','---'].join('\n');
+ const state=EditorState.create({doc:codeText,extensions:liveMarkdown()});const units=markdownPreviewUnits(state.doc),code=units.find(unit=>unit.kind==='list-code');assert.ok(code);assert.equal(units.filter(unit=>unit.kind==='list').length,2);assert.equal(code.text.split('\n').length,5);assert.equal(codeText.slice(code.sourceOffsets[code.text.indexOf('--dataset')],code.sourceOffsets[code.text.indexOf('--dataset')]+9),'--dataset');
+ const editor=new EditorView({parent:document.querySelector('main'),state});assert.equal(editor.dom.querySelectorAll('pre code').length,1);assert.match(editor.dom.querySelector('pre code').textContent,/--figure-name zcz_incremental.png/);
+ const command=editor.state.doc.line(4);editor.dispatch({selection:{anchor:command.from+indent.length},effects:revealBlock.of(command.from+indent.length)});assert.equal(editor.dom.querySelectorAll('pre code').length,0,'editing reveals one complete fenced block');assert.equal(editor.dom.querySelectorAll('.cm-markdown-list-line').length,2,'sibling items remain rendered');
+ editor.dispatch({selection:{anchor:editor.state.doc.line(7).from}});assert.equal(editor.dom.querySelectorAll('pre code').length,1,'code block restores intact after leaving it');assert.equal(editor.state.doc.toString(),codeText);editor.destroy();
+}
+dom.window.close();console.log('Click-only local source, independent list/nested-list/table rows, restored previews and paragraph-line editing passed');

@@ -1,13 +1,14 @@
+import {gitTreeChanges,applyGitTree} from './git-tree.js';
 import {randomUUID} from 'node:crypto';
 import {isSupportedText,isOfficeTemporary} from './file-types.js';
 import {fileContent,fileLimit} from './file-content.js';
-import {readdir,realpath,readFile,stat,lstat,link,open,rename,unlink} from 'node:fs/promises';
+import {readdir,realpath,readFile,stat,lstat,link,open,rename,unlink,mkdir,rmdir} from 'node:fs/promises';
 import {resolve,relative,isAbsolute,basename,dirname,join} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {buildProject} from './project.js';
 const fileVersion=info=>[info.dev,info.ino,info.size,info.mtimeMs,info.ctimeMs].join(':');
-const ignored=new Set(['.git','node_modules','.codex','.agents','.aws']);
+const ignored=new Set(['.markatlas','.git','node_modules','.codex','.agents','.aws']);
 export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJECT_ROOT) {
   let allowed=[];
   const connected=new Set(),singleFiles=new Map();
@@ -54,23 +55,24 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
         if(!(await stat(root)).isDirectory())throw Error('Choose a folder, not a file.');
       } else [root]=await roots();
       if(!root)throw Error('No workspace folder was shared by the app. Use Open folder to connect a local folder.');
-      const files=[],folders=[];let omitted=0,visited=0;
+      const files=[],folders=[],directoryTimes=new Map();let omitted=0;
       async function walk(dir,prefix='',depth=0) {
-        if(depth>20){omitted++;return;}
+        directoryTimes.set(prefix,(await stat(dir)).mtimeMs);
         const entries=await readdir(dir,{withFileTypes:true});
         for(const entry of entries) {
-          if(++visited>10000){omitted++;break;}
           if(entry.isSymbolicLink() || ignored.has(entry.name) || isOfficeTemporary(entry.name) || entry.name==='.gpt-commenter-build'){omitted++;continue;}
           const path=prefix?`${prefix}/${entry.name}`:entry.name;
           if(entry.isDirectory()){folders.push(path);await walk(resolve(dir,entry.name),path,depth+1);}
-          else if(entry.isFile())files.push({name:entry.name,webkitRelativePath:`${basename(root)}/${path}`});
+          else if(entry.isFile()){const info=await stat(resolve(dir,entry.name)).catch(()=>null);if(info)files.push({name:entry.name,lastModified:info.mtimeMs,webkitRelativePath:`${basename(root)}/${path}`});}
         }
       }
       await walk(root);const tree=buildProject(files);tree.root.name=basename(root);
       for(const path of folders){let parent=tree.root,prefix='';for(const name of path.split('/')){prefix=prefix?prefix+'/'+name:name;let child=parent.children.find(n=>n.type==='directory' && n.name===name);if(!child){child={type:'directory',name,path:prefix,children:[]};parent.children.push(child);}parent=child;}}
       const sort=node=>{node.children.sort((a,b)=>(a.type===b.type?0:a.type==='directory'?-1:1)||a.name.localeCompare(b.name));node.children.filter(n=>n.type==='directory').forEach(sort);};sort(tree.root);
+      const changes=await gitTreeChanges(root);applyGitTree(tree.root,changes);
+      const timestamps=node=>{if(node.children)node.modified=Math.max(directoryTimes.get(node.path)||0,...node.children.map(timestamps));return node.modified||0;};timestamps(tree.root);
       if(folderPath!==undefined)connected.add(root);
-      return {root:tree.root,rootPath:root,omitted:omitted+tree.omitted};
+      return {root:tree.root,rootPath:root,git:changes!==null,omitted:omitted+tree.omitted};
     },
     async read(root,path,ifNoneMatch) {
       await roots();
@@ -79,6 +81,27 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
       const etag=fileVersion(info);
       if(ifNoneMatch===etag)return {name:path,etag,notModified:true};
       return {name:path,...fileContent(path,await readFile(target)),etag};
+    },
+    async rename(root,path,name) {
+      await roots();
+      if(!allowed.includes(root) && !connected.has(root))throw Error('Open a project folder before renaming.');
+      if(!name.trim() || name==='.' || name==='..' || /[\\/\0]/.test(name) || ignored.has(name))throw Error('Enter a valid file or folder name.');
+      if(!path || isAbsolute(path) || path.split('/').includes('..'))throw Error('Rename only files or folders inside the project.');
+      const source=await inside(root,path),info=await lstat(source);
+      if(source!==resolve(root,path) || source===root || (!info.isFile() && !info.isDirectory()))throw Error('Choose a regular file or folder.');
+      const target=join(dirname(source),name),next=relative(root,target);
+      if(source===target)return {path:next};
+      try{
+        if(info.isDirectory()){
+          // Reserve an empty destination exclusively: never replace an existing folder.
+          await mkdir(target);
+          try{await rename(source,target);}catch(error){await rmdir(target).catch(()=>{});throw error;}
+        }else{
+          await link(source,target);
+          try{await unlink(source);}catch(error){await unlink(target).catch(()=>{});throw error;}
+        }
+      }catch(error){if(error.code==='EEXIST')throw Error('A file or folder with that name already exists.');throw error;}
+      return {path:next};
     },
     async move(root,path,folder) {
       await roots();

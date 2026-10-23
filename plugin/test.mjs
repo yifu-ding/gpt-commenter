@@ -125,13 +125,13 @@ try {
   const liveResult=JSON.parse((await client.callTool({name:'resolve_review_annotation',arguments:{id:liveId}})).content[0].text);
   assert.equal(liveResult.current.startLine,2);assert.equal(liveResult.hasUnsavedEdits,true);
   const batchEntry={root:codeRoot,path:'review.js',etag:codeSave.structuredContent.etag,item:{id:liveId,sourceName:'review.js',selectedText:'old quote',message:'Review this'}};
-  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,true,'batch must not send unsaved file edits');
+  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,undefined,'comments may be sent with unsaved draft context');
   const savedDocument={...liveDocument,baseText:liveDocument.text};
   const savedBatchFile=await client.callTool({name:'save_review_project_file',arguments:{root:codeRoot,path:'review.js',text:liveDocument.text,expectedEtag:codeSave.structuredContent.etag}});
   await client.callTool({name:'update_review_document',arguments:savedDocument});
   const batchResult=await client.callTool({name:'prepare_review_batch',arguments:{entries:[{...batchEntry,etag:savedBatchFile.structuredContent.etag}]}});
   assert.equal(batchResult.isError,undefined);assert.equal(batchResult.structuredContent.entries[0].item.startLine,2);assert.equal(batchResult.structuredContent.entries[0].item.selectedText,'const');
-  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,true,'stale disk references fail final validation');
+  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,undefined,'disk changes refresh context without blocking Send');
   const liveRead=JSON.parse((await client.callTool({name:'read_review_working_copy',arguments:{id:liveId,startLine:2,endLine:2}})).content[0].text);assert.equal(liveRead.text,'const value = 2;');
   console.log('MCP viewer entrypoints, tool results, and UI resource checks passed (desktop rendering not tested)');
 } finally {

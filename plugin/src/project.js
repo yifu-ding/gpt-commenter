@@ -1,6 +1,6 @@
 import {isSupportedFile,isOfficeTemporary} from './file-types.js';
 const ignored = new Set(['.git','node_modules','.DS_Store']);
-export function buildProject(files,limit=5000) {
+export function buildProject(files,limit=Infinity) {
   const root={name:'Project',type:'directory',path:'',children:[]};
   const directories=new Map([['',root]]), entries=new Map();
   let omitted=0;
@@ -20,7 +20,7 @@ export function buildProject(files,limit=5000) {
     }
     const relativePath=relative.join('/');
     if(entries.has(relativePath))continue;
-    const node={name:relative.at(-1),path:relativePath,type:'file',supported:isSupportedFile(relativePath)};
+    const node={name:relative.at(-1),path:relativePath,type:'file',modified:file.lastModified||0,supported:isSupportedFile(relativePath)};
     parent.children.push(node);entries.set(relativePath,file);
   }
   function sort(node){node.children.sort((a,b)=>(a.type===b.type?0:a.type==='directory'?-1:1)||a.name.localeCompare(b.name));for(const child of node.children)if(child.type==='directory')sort(child);}

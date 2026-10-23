@@ -47,7 +47,7 @@ export async function renderWordPreview(data, doc = document) {
     if (text.length > 5 * 1024 * 1024) throw Error("Extracted Word text exceeds 5 MB.");
     const digest = await doc.defaultView.crypto.subtle.digest("SHA-256", bytes);
     const fingerprint = Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;background:#eef0f3;color:#222;font-family:Arial,sans-serif}body{overflow:auto}.word-page-wrapper{display:flex!important;flex-direction:column!important;align-items:center!important;gap:24px!important;padding:24px!important;box-sizing:border-box!important;background:transparent!important;min-width:100%}section.word-page{margin:0!important;transform-origin:top left;box-shadow:none!important}.word-frame{position:relative;flex-shrink:0;box-sizing:content-box;background:white;border:1px solid #cdd3dc;border-radius:3px;box-shadow:0 3px 18px #00000012;overflow:hidden}img{max-width:100%}a{color:#3977c6;text-decoration:underline}.word-review-overlay{position:absolute;inset:0;z-index:10;pointer-events:none}.word-review-highlight{position:absolute;background:#86b7ff55;border-radius:2px}.word-review-note{position:absolute;pointer-events:auto;border:1px solid #91b9ed;background:#e4f0ff;color:#245c9e;border-radius:4px;font:11px system-ui;cursor:pointer}</style></head><body>${safe.innerHTML}</body></html>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;background:#eef0f3;color:#222;font-family:Arial,sans-serif}body{overflow:auto}.word-page-wrapper{display:flex!important;flex-direction:column!important;align-items:center!important;gap:24px!important;padding:24px!important;box-sizing:border-box!important;background:transparent!important;min-width:100%}section.word-page{margin:0!important;transform-origin:top left;box-shadow:none!important}.word-frame{position:relative;flex-shrink:0;box-sizing:content-box;background:white;border:1px solid #cdd3dc;border-radius:3px;box-shadow:0 3px 18px #00000012;overflow:hidden}img{max-width:100%}a{color:#3977c6;text-decoration:underline}.word-review-overlay{position:absolute;inset:0;z-index:10;pointer-events:none}.word-review-highlight{position:absolute;background:transparent;border-bottom:2px solid #888;border-radius:0}.word-review-note{position:absolute;pointer-events:auto;border:1px solid #91b9ed;background:#e4f0ff;color:#245c9e;border-radius:4px;font:11px system-ui;cursor:pointer}</style></head><body>${safe.innerHTML}</body></html>`;
     return { html: html, text: text, fingerprint };
   } catch (error) {
     throw Error(`Cannot render Word document: ${error.message}`);
@@ -145,7 +145,6 @@ export function createWordViewer(container, { onSelection, onNote, onDismiss = (
     const overlay = doc.createElement("div");
     overlay.className = "word-review-overlay";
     doc.body.append(overlay);
-    const iconPositions = new Map();
     for (const note of notes) {
       const first = index.entries.find((entry) => entry.end > note.startOffset), last2 = index.entries.findLast((entry) => entry.start < note.endOffset);
       if (!first || !last2 || note.endOffset <= note.startOffset) continue;
@@ -157,23 +156,10 @@ export function createWordViewer(container, { onSelection, onNote, onDismiss = (
         const mark = doc.createElement("span");
         mark.className = "word-review-highlight";
         Object.assign(mark.style, { left: `${rect2.left + win.scrollX}px`, top: `${rect2.top + win.scrollY}px`, width: `${rect2.width}px`, height: `${rect2.height}px` });
+        if(!note.temporary){mark.dataset.annotation=note.id;mark.tabIndex=0;mark.setAttribute('role','button');mark.setAttribute('aria-label','Open Word review note');const activate=event=>{event.stopPropagation();onNote(note,anchor(mark.getBoundingClientRect()));};mark.addEventListener('click',activate);mark.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();activate(event);}});}
         overlay.append(mark);
       }
-      const rect = rects.at(-1);
-      if (!rect || note.temporary) continue;
-      const button = doc.createElement("button");
-      button.className = "word-review-note";
-      button.textContent = note.kind === "explanation" ? "?" : "\u25A4";
-      button.setAttribute("aria-label", "Open Word review note");
-      button.title = note.message || "Explanation";
-      const key = `${rect.right}:${rect.top}`, offset = iconPositions.get(key) || 0;
-      iconPositions.set(key, offset + 20);
-      Object.assign(button.style, { left: `${rect.right + win.scrollX + 2 + offset}px`, top: `${rect.top + win.scrollY}px` });
-      button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        onNote(note, anchor(button.getBoundingClientRect()));
-      });
-      overlay.append(button);
+
     }
   }
   function capture(event) {
@@ -235,6 +221,7 @@ export function createWordViewer(container, { onSelection, onNote, onDismiss = (
         frame.contentDocument.addEventListener("pointerdown", (event) => {
           if (!event.target.closest?.(".word-review-overlay")) onDismiss();
         });
+        frame.contentDocument.addEventListener('click',event=>{if(!frame.contentWindow.getSelection()?.isCollapsed || event.target.closest?.('.word-review-overlay'))return;const marks=[...frame.contentDocument.querySelectorAll('.word-review-highlight[data-annotation]')].reverse();const mark=marks.find(node=>{const r=node.getBoundingClientRect();return event.clientX>=r.left && event.clientX<=r.right && event.clientY>=r.top && event.clientY<=r.bottom;});mark?.click();});
         frame.contentDocument.addEventListener("pointerup", capture);
         frame.contentDocument.addEventListener("keyup", capture);
         frame.contentDocument.addEventListener("keydown", (event) => {

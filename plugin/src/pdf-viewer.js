@@ -9,7 +9,6 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
   function marks(){
     for(const {page,highlights} of frames.values()){
       highlights.replaceChildren();
-      const iconPositions=new Map();
       for(const item of notes){
         if(item.pdf?.region){
           if(item.pdf.page!==page.number)continue;
@@ -19,8 +18,8 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
           highlights.append(mark);continue;
         }
         const words=page.words.filter(w=>w.endOffset>item.startOffset && w.startOffset<item.endOffset);
-        for(const word of words){const mark=window.document.createElement('span');mark.className='pdf-highlight';if(item.anchorStatus==='edited')mark.classList.add('pdf-changed');Object.assign(mark.style,{left:`${word.x}px`,top:`${word.y}px`,width:`${word.width}px`,height:`${word.height}px`});highlights.append(mark);}
-        if(words.length && !item.temporary){const r=words.at(-1),icon=window.document.createElement('button'),key=`${r.x+r.width}:${r.y+r.height}`,offset=iconPositions.get(key) || 0;iconPositions.set(key,offset+20);icon.className='annotation-icon';icon.textContent=item.kind==='explanation'?'?':'▤';icon.setAttribute('aria-label',`Review note on PDF page ${page.number}`);icon.title=item.anchorStatus==='edited'?'Passage changed — review this comment':item.message || 'Explain selection';Object.assign(icon.style,{position:'absolute',left:`${r.x+r.width+offset}px`,top:`${r.y+r.height-2}px`});icon.addEventListener('click',event=>{event.stopPropagation();onNote(item,icon.getBoundingClientRect());});highlights.append(icon);}
+        for(const word of words){const mark=window.document.createElement('span');mark.className='pdf-highlight';if(item.anchorStatus==='edited')mark.classList.add('pdf-changed');Object.assign(mark.style,{left:`${word.x}px`,top:`${word.y}px`,width:`${word.width}px`,height:`${word.height}px`});if(!item.temporary){mark.dataset.annotation=item.id;mark.tabIndex=0;mark.setAttribute('role','button');mark.setAttribute('aria-label',`Review note on PDF page ${page.number}`);const activate=event=>{event.stopPropagation();onNote(item,mark.getBoundingClientRect());};mark.addEventListener('click',activate);mark.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();activate(event);}});}highlights.append(mark);}
+
       }
     }
   }
@@ -41,7 +40,13 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
       const canvas=window.document.createElement('div');canvas.className='pdf-page';canvas.style.width=`${page.width}px`;canvas.style.height=`${page.height}px`;
       // Give vector images their actual display size, outside the scaled text overlay.
       const image=window.document.createElement('img');image.alt='';image.draggable=false;image.className='pdf-image';
-      const highlights=window.document.createElement('div');highlights.className='pdf-notes';canvas.append(highlights);frame.append(image,canvas);stack.append(frame);frames.set(page.number,{page,frame,canvas,image,highlights,loaded:false});
+      const highlights=window.document.createElement('div');highlights.className='pdf-notes';canvas.append(highlights);for(const link of data.navigation?.links?.[page.number] || []){
+        const anchor=window.document.createElement('a');anchor.className='pdf-link';anchor.title=link.page?`Go to page ${link.page}`:link.url;
+        Object.assign(anchor.style,{position:'absolute',zIndex:3,left:`${link.x}px`,top:`${link.y}px`,width:`${link.width}px`,height:`${link.height}px`});
+        if(link.page){anchor.href=`#page-${link.page}`;anchor.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();frames.get(link.page)?.frame.scrollIntoView({block:'start',behavior:'smooth'});});}else{anchor.href=link.url;anchor.target='_blank';anchor.rel='noopener noreferrer';}
+        canvas.append(anchor);
+      }
+      frame.append(image,canvas);stack.append(frame);frames.set(page.number,{page,frame,canvas,image,highlights,loaded:false});
     }
     resizePages=resize;resize();container.scrollLeft=(parseFloat(stack.style.width)-Math.max(100,container.getBoundingClientRect().width))/2;marks();onZoom(zoom);
     if(typeof ResizeObserver!=='undefined'){resizeObserver=new ResizeObserver(resize);resizeObserver.observe(container);}
@@ -60,6 +65,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
     const child=node.childNodes?.[end?offset-1:offset];const candidates=child?.querySelectorAll?.('.pdf-word');const span=child?.matches?.('.pdf-word')?child:(end?candidates?.[candidates.length-1]:candidates?.[0]);
     return span?{span,offset:end?span.textContent.length:0}:null;
   }
+  container.addEventListener('click',event=>{const word=event.target.closest?.('.pdf-word');if(!word || !window.getSelection()?.isCollapsed)return;const note=notes.findLast(item=>!item.temporary && !item.pdf?.region && item.startOffset<Number(word.dataset.end) && item.endOffset>Number(word.dataset.start));if(note){event.stopPropagation();onNote(note,word.getBoundingClientRect());}});
   function capture(event){
     if(!document || regionMode || drag || event.target.closest?.('.annotation-icon'))return;
     const selection=window.getSelection();if(!selection?.rangeCount || selection.isCollapsed)return;
@@ -76,7 +82,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
     let anchor=null;
     if(point){let distance=Infinity;for(const {frame} of frames.values()){const r=frame.getBoundingClientRect();if(!r.width || !r.height)continue;const d=Math.max(r.top-point.y,0,point.y-r.bottom);if(d<distance){distance=d;anchor={frame,x:(point.x-r.left)/r.width,y:(point.y-r.top)/r.height};}}}
     zoom=next;resizePages();
-    if(anchor){const r=anchor.frame.getBoundingClientRect();container.scrollLeft+=r.left+anchor.x*r.width-point.x;window.scrollBy({top:r.top+anchor.y*r.height-point.y,left:0,behavior:'instant'});}
+    if(anchor){const r=anchor.frame.getBoundingClientRect();container.scrollLeft+=r.left+anchor.x*r.width-point.x;(container.closest('main') || window).scrollBy({top:r.top+anchor.y*r.height-point.y,left:0,behavior:'instant'});}
     onZoom(zoom);
   }
   function wheelZoom(event){

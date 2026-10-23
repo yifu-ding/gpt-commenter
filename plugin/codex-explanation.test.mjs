@@ -14,7 +14,8 @@ try{
   assert.ok(trace.args.includes('--ephemeral'));assert.ok(trace.args.includes('--ignore-user-config'));
   assert.equal(trace.args[trace.args.indexOf('--sandbox')+1],'read-only');assert.equal(trace.args[trace.args.indexOf('--model')+1],'gpt-6-luna');
   assert.equal(trace.imageExists,true);await assert.rejects(()=>access(trace.cwd),/ENOENT/);
-  await assert.rejects(()=>codexExplanation({prompt:'TEST_FAILURE',model:'gpt-6-luna'},options),/conversation failed/);
+  await assert.rejects(()=>codexExplanation({prompt:'TEST_FAILURE',model:'gpt-6-luna'},options),/Model access denied/);
+  await assert.rejects(()=>codexExplanation({prompt:'TEST_LIMIT',model:'gpt-6-luna'},options),/out of Codex usage.*Limit resets on October 24 at 09:00/);
   await assert.rejects(()=>codexExplanation({prompt:'TEST_EMPTY',model:'gpt-6-luna'},options),/no explanation/);
   await assert.rejects(()=>codexExplanation({prompt:'TEST_TIMEOUT',model:'gpt-6-luna'},{...options,timeout:100}),/timed out/);
   const controller=new AbortController();controller.abort();

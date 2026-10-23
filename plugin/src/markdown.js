@@ -1,3 +1,5 @@
+import {applyTableColumns,tableCellText} from './table-layout.js';
+import {renderProperties} from './markdown-properties.js';
 import {fromMarkdown} from 'mdast-util-from-markdown';
 import {decodeString} from 'micromark-util-decode-string';
 import {gfm} from 'micromark-extension-gfm';
@@ -8,7 +10,7 @@ import {frontmatter} from 'micromark-extension-frontmatter';
 import {frontmatterFromMarkdown} from 'mdast-util-frontmatter';
 import katex from 'katex';
 import createDOMPurify from 'dompurify';
-import hljs from 'highlight.js/lib/common';
+import hljs from './highlighter.js';
 import mermaid from 'mermaid';
 let diagramId=0;
 mermaid.initialize({startOnLoad:false,securityLevel:'strict',suppressErrorRendering:true,htmlLabels:false,flowchart:{htmlLabels:false}});
@@ -44,7 +46,6 @@ export function renderMarkdown(container, source, mode, items = [], options = {}
   const purify=createDOMPurify(doc.defaultView);
   const definitions=new Map(),footnotes=new Map();
   const mappings = new WeakMap(),mappedNodes=[];
-  const markers = new Set();
   function text(parent, value, start, end, map = null) {
     const exact = map || (source.slice(start, end) === value ? Array.from({length: value.length + 1}, (_, i) => start + i) : null);
     const cuts = new Set([0, value.length]);
@@ -64,21 +65,13 @@ export function renderMarkdown(container, source, mode, items = [], options = {}
       let target = parent;
       if (active.length) {
         target = doc.createElement('mark');
-        target.dataset.annotation = active[0].id;
+        const saved=active.findLast(item=>!item.temporary);
+        if(saved){target.dataset.annotation=saved.id;target.dataset.noteKind=saved.kind;target.setAttribute('role','button');target.tabIndex=0;target.setAttribute('aria-label',`${saved.kind==='comment'?'Comment':'Explanation'} on lines ${saved.startLine}–${saved.endLine}`);target.title=saved.message||'Explanation';}
         if (active.some(item => item.temporary)) target.classList.add('pending-selection');
         parent.append(target);
       }
       target.append(node);
-      for (const item of active) if (!item.temporary && item.endOffset <= hi && !markers.has(item.id)) {
-        const icon = doc.createElement('button');
-        icon.className = 'annotation-icon';icon.contentEditable='false';
-        icon.dataset.itemId = item.id;
-        icon.setAttribute('aria-label', `${item.kind === 'comment' ? 'Comment' : 'Explanation'} on lines ${item.startLine}–${item.endLine}`);
-        icon.title = item.kind === 'comment' ? item.message : 'Explanation request';
-        icon.textContent = item.kind === 'comment' ? '▤' : '?';
-        parent.append(icon);
-        markers.add(item.id);
-      }
+
     }
   }
 
@@ -135,7 +128,7 @@ export function renderMarkdown(container, source, mode, items = [], options = {}
     const start = node.position?.start.offset ?? 0, end = node.position?.end.offset ?? start;
     if (node.type === 'table') {
       const table=doc.createElement('table'),head=doc.createElement('thead'),body=doc.createElement('tbody');
-      table.append(head,body);parent.append(table);
+      table.append(head,body);applyTableColumns(table,node.children.map(row=>row.children.map(tableCellText)));parent.append(table);
       node.children.forEach((row,index)=>{
         const tr=doc.createElement('tr');(index===0 ? head : body).append(tr);
         row.children.forEach((cell,column)=>{
@@ -150,6 +143,7 @@ export function renderMarkdown(container, source, mode, items = [], options = {}
     if(node.type==='highlight'){const mark=doc.createElement('mark');mark.className='obsidian-highlight';parent.append(mark);for(const child of node.children)visit(child,mark);return;}
     if (node.type === 'text') {obsidianText(parent,node.value,start,end);return;}
 
+    if(node.type==='yaml' && renderProperties(parent,node.value,source.indexOf('\n',start)+1,text))return;
     if(node.type==='yaml' || node.type==='toml'){
       const details=doc.createElement('details'),summary=doc.createElement('summary'),pre=doc.createElement('pre');details.className='metadata';summary.textContent='Properties';details.append(summary,pre);parent.append(details);text(pre,node.value,start,end);return;
     }

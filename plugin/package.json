@@ -10,7 +10,7 @@
     "pack:desktop": "python3 package-desktop.py",
     "build": "node build-theme.mjs && esbuild src/viewer.js --bundle --format=iife --minify --outfile=dist/viewer.js && esbuild src/server.js --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js && ./node_modules/node/bin/node build-native.mjs",
     "start": "./node_modules/node/bin/node dist/server.js",
-    "test": "./node_modules/node/bin/node test.mjs && ./node_modules/node/bin/node workspace-default.test.mjs && ./node_modules/node/bin/node codex-explanation.test.mjs && ./node_modules/node/bin/node background-explanation.test.mjs && ./node_modules/node/bin/node viewer.test.mjs && ./node_modules/node/bin/node chat.test.mjs && ./node_modules/node/bin/node review-batch.test.mjs && ./node_modules/node/bin/node review-batch-viewer.test.mjs && ./node_modules/node/bin/node project.test.mjs && ./node_modules/node/bin/node file-menu.test.mjs && ./node_modules/node/bin/node workspace.test.mjs && ./node_modules/node/bin/node single-file.test.mjs && ./node_modules/node/bin/node single-file-viewer.test.mjs && ./node_modules/node/bin/node refresh.test.mjs && ./node_modules/node/bin/node folder-picker.test.mjs && ./node_modules/node/bin/node annotation-edits.test.mjs && ./node_modules/node/bin/node review-store.test.mjs && ./node_modules/node/bin/node edit-history.test.mjs && ./node_modules/node/bin/node latex.test.mjs && ./node_modules/node/bin/node pdf-viewer.test.mjs && ./node_modules/node/bin/node word-viewer.test.mjs && ./node_modules/node/bin/node obsidian.test.mjs && ./node_modules/node/bin/node web-preview.test.mjs && ./node_modules/node/bin/node eight-fixes.test.mjs && ./node_modules/node/bin/node html-preview.test.mjs",
+    "test": "./node_modules/node/bin/node test.mjs && ./node_modules/node/bin/node workspace-default.test.mjs && ./node_modules/node/bin/node codex-explanation.test.mjs && ./node_modules/node/bin/node background-explanation.test.mjs && ./node_modules/node/bin/node viewer.test.mjs && ./node_modules/node/bin/node chat.test.mjs && ./node_modules/node/bin/node review-batch.test.mjs && ./node_modules/node/bin/node review-batch-viewer.test.mjs && ./node_modules/node/bin/node project.test.mjs && ./node_modules/node/bin/node file-menu.test.mjs && ./node_modules/node/bin/node workspace.test.mjs && ./node_modules/node/bin/node single-file.test.mjs && ./node_modules/node/bin/node single-file-viewer.test.mjs && ./node_modules/node/bin/node refresh.test.mjs && ./node_modules/node/bin/node folder-picker.test.mjs && ./node_modules/node/bin/node annotation-edits.test.mjs && ./node_modules/node/bin/node review-store.test.mjs && ./node_modules/node/bin/node edit-history.test.mjs && ./node_modules/node/bin/node latex.test.mjs && ./node_modules/node/bin/node pdf-viewer.test.mjs && ./node_modules/node/bin/node word-viewer.test.mjs && ./node_modules/node/bin/node obsidian.test.mjs && ./node_modules/node/bin/node web-preview.test.mjs && ./node_modules/node/bin/node eight-fixes.test.mjs && ./node_modules/node/bin/node html-preview.test.mjs && ./node_modules/node/bin/node navigation-storage.test.mjs && ./node_modules/node/bin/node split-workspace.test.mjs && ./node_modules/node/bin/node pdf-layout.test.mjs && ./node_modules/node/bin/node live-markdown.test.mjs && ./node_modules/node/bin/node editor-indent.test.mjs && ./node_modules/node/bin/node native-ui.test.mjs && ./node_modules/node/bin/node ui-polish.test.mjs && ./node_modules/node/bin/node tree-git.test.mjs && ./node_modules/node/bin/node properties.test.mjs && ./node_modules/node/bin/node accent.test.mjs && ./node_modules/node/bin/node rename.test.mjs && ./node_modules/node/bin/node rename-ui.test.mjs",
     "preview": "./node_modules/node/bin/node preview.mjs"
   },
   "dependencies": {
@@ -33,6 +33,7 @@
     "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@modelcontextprotocol/sdk": "^1.20.2",
     "@openai/mcp-extensions": "latest",
+    "@uiw/codemirror-theme-github": "^4.25.12",
     "codemirror": "^6.0.2",
     "docx-preview": "^0.4.1",
     "dompurify": "^3.4.17",
@@ -53,9 +54,11 @@
     "micromark-extension-math": "^3.1.0",
     "micromark-util-decode-string": "^2.0.1",
     "parse5": "^8.0.1",
+    "pdfjs-dist": "^6.4.299",
     "postcss": "^8.5.31",
     "postcss-safe-parser": "^7.1.0",
     "postcss-selector-parser": "^7.1.7",
+    "yaml": "^2.9.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -1,3 +1,4 @@
+import {revealInFinder} from './finder.js';
 import {launchPreviewBrowser} from './browser-launch.js';
 import {webPreviewService} from './web-preview.js';
 import {singleFileService} from './single-file.js';
@@ -92,6 +93,7 @@ registerAppTool(server,'list_markdown_project',{
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
 },async({folderPath})=>({content:[],structuredContent:await workspace.list(folderPath)}));
 const latex=latexService(workspace);
+registerAppTool(server,'reveal_review_project_file',{description:'Reveal a connected file or folder in Finder.',inputSchema:{root:z.string(),path:z.string()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path})=>({content:[],structuredContent:await revealInFinder(workspace,root,path)}));
 registerAppTool(server,'resolve_native_preview_file',{description:'Resolve a connected file for the host native preview.',inputSchema:{root:z.string(),path:z.string()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path})=>({content:[],structuredContent:{path:await workspace.resolve(root,path)}}));
 registerAppTool(server,'resolve_native_office_file',{
   description:'Resolve a connected Word or Excel file for opening in the host native viewer without reading its contents.',
@@ -125,11 +127,26 @@ registerAppTool(server,'move_review_project_file',{
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false}
 },async({root,path,folder})=>({content:[],structuredContent:await workspace.move(root,path,folder)}));
 const reviews=reviewStore();
+registerAppTool(server,'rename_review_project_file',{
+  description:'Rename a file or folder in the connected project without replacing an existing entry.',
+  inputSchema:{root:z.string(),path:z.string(),name:z.string()},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false}
+},async({root,path,name})=>{const result=await workspace.rename(root,path,name);try{await reviews.renamed(root,path,result.path);}catch(error){result.warning='Renamed, but note metadata could not be fully updated: '+error.message;}return {content:[],structuredContent:result};});
+registerAppTool(server,'read_markatlas_pane',{
+  description:'Create the companion viewer for a second connected file.',
+  inputSchema:{root:z.string(),path:z.string(),token:z.string().uuid()},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
+},async config=>{await workspace.resolve(config.root,config.path);const json=JSON.stringify(config).replaceAll('<','\\u003c');return {content:[],structuredContent:{html:viewerHtml().replace('<script>','<script>window.__markatlasPane='+json+';')}};});
 registerAppTool(server,'update_review_document',{
   description:'Sync the local working document and live annotation anchors without sending a chat message.',
-  inputSchema:{checkpointAnnotationId:z.string().uuid().optional(),identity:z.string(),sourceName:z.string(),sourcePath:z.string().optional(),text:z.string().max(5*1024*1024),baseText:z.string().max(5*1024*1024),annotations:z.array(z.object({id:z.string().uuid(),startOffset:z.number().int().nonnegative(),endOffset:z.number().int().nonnegative()}).passthrough()).max(500)},
+  inputSchema:{root:z.string().optional(),checkpointAnnotationId:z.string().uuid().optional(),identity:z.string(),sourceName:z.string(),sourcePath:z.string().optional(),text:z.string().max(5*1024*1024),baseText:z.string().max(5*1024*1024),annotations:z.array(z.object({id:z.string().uuid(),startOffset:z.number().int().nonnegative(),endOffset:z.number().int().nonnegative()}).passthrough()).max(500)},
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
-},async data=>({content:[],structuredContent:await reviews.update(data)}));
+},async data=>{if(data.root)await workspace.resolve(data.root,'.');return {content:[],structuredContent:await reviews.update(data)};});
+registerAppTool(server,'review_project_state',{
+  description:'Load or save project-local review queue and recovery drafts.',
+  inputSchema:{root:z.string(),state:z.object({entries:z.array(z.any()).max(500),drafts:z.record(z.any()),changedIdentities:z.array(z.string()).optional(),removedIds:z.array(z.string()).optional()}).optional()},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+},async({root,state})=>{await workspace.resolve(root,'.');return {content:[],structuredContent:await reviews.project(root,state)};});
 registerAppTool(server,'prepare_review_batch',{
   description:'Validate and refresh all queued review comments immediately before sending them together.',
   inputSchema:{entries:z.array(z.object({item:z.object({id:z.string().uuid()}).passthrough(),root:z.string().nullable().optional(),path:z.string().nullable().optional(),etag:z.string().nullable().optional()})).min(1).max(500)},
