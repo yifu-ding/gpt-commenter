@@ -90,10 +90,10 @@ try {
   assert.equal(settings.structuredContent.values.treePosition,'Left');
   assert.equal(settings.structuredContent.values.showGitChanges,true);
   assert.ok(settings.structuredContent.layout.some(group=>group.items.some(item=>item.tool==='markatlas_clear_recently_opened')));
-  assert.equal(settings.structuredContent.schema.properties.themeColor,undefined);
-  assert.ok(settings.structuredContent.layout[0].items.some(item=>item.tool==='markatlas_theme_color'));
-  const palette=await client.readResource({uri:'ui://gpt-commenter/theme-color'});assert.match(palette.contents[0].text,/radiogroup/);assert.ok(!palette.contents[0].text.includes('/* SCRIPT */'));
-  const savedSettings=await client.callTool({name:'markatlas_settings_update',arguments:{set:{treePosition:'Right',outlinePosition:'Right',showGitChanges:false,themeColor:'purple'}}});
+  assert.equal(settings.structuredContent.values.themeColor,'Host');
+  assert.ok(settings.structuredContent.layout[0].items.some(item=>item.property==='themeColor'));
+  assert.ok(!tools.some(tool=>tool.name==='markatlas_theme_color'));
+  const savedSettings=await client.callTool({name:'markatlas_settings_update',arguments:{set:{treePosition:'Right',outlinePosition:'Right',showGitChanges:false,themeColor:'Purple'}}});
   assert.equal(savedSettings.structuredContent.values.showGitChanges,false);
   assert.equal((await client.callTool({name:'markatlas_settings_update',arguments:{set:{showGitChanges:'false'}}})).isError,true);
   const prompt=await client.callTool({name:'markatlas_clear_recently_opened',arguments:{}});

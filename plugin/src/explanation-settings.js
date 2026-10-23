@@ -11,17 +11,18 @@ export const settingsSchema={type:'object',properties:{
   showGitChanges:{type:'boolean',title:'Show git changes',description:'Show added and removed line counts in the file tree.'},
   outlinePosition:{type:'string',title:'Outline position',description:'Default side for Markdown and PDF outlines.',enum:['left','right']}
 },required:Object.keys(defaults),additionalProperties:false};
-export const settingsLayout=[{kind:'group',title:'Appearance',items:[{kind:'property',property:'treePosition'},{kind:'tool',tool:'markatlas_theme_color',description:'Choose Host or a preset color with a color sample.'},...['showGitChanges','outlinePosition'].map(property=>({kind:'property',property}))]},{kind:'group',title:'History',items:[{kind:'tool',tool:'markatlas_clear_recently_opened',description:'Clear only the file tree recently opened list. Confirmation required; comments and other caches are kept.'}]},{kind:'group',title:'Explanations',items:[{kind:'property',property:'explanationModel'}]}];
+export const settingsLayout=[{kind:'group',title:'Appearance',items:[{kind:'property',property:'treePosition'},{kind:'property',property:'themeColor'},...['showGitChanges','outlinePosition'].map(property=>({kind:'property',property}))]},{kind:'group',title:'History',items:[{kind:'tool',tool:'markatlas_clear_recently_opened',description:'Clear only the file tree recently opened list. Confirmation required; comments and other caches are kept.'}]},{kind:'group',title:'Explanations',items:[{kind:'property',property:'explanationModel'}]}];
 // Presentation labels are separate from stored values, preserving existing preferences.
 export function presentSettings(preferences){
- const properties={...settingsSchema.properties};delete properties.themeColor;
- const values={...preferences};delete values.themeColor;
- for(const key of ['treePosition','outlinePosition']){
-  properties[key]={...properties[key],enum:['Left','Right']};values[key]=preferences[key]==='right'?'Right':'Left';
+ const properties={...settingsSchema.properties};
+ const values={...preferences};
+ for(const key of ['treePosition','outlinePosition','themeColor']){
+  const title=value=>value[0].toUpperCase()+value.slice(1);
+  properties[key]={...properties[key],enum:properties[key].enum.map(title)};values[key]=title(preferences[key]);
  }
  return {schema:{...settingsSchema,properties,required:Object.keys(properties)},layout:settingsLayout,values,preferences};
 }
-export function normalizeSettingLabels(set){return Object.fromEntries(Object.entries(set).map(([key,value])=>[key,['treePosition','outlinePosition'].includes(key) && typeof value==='string'?value.toLowerCase():value]));}
+export function normalizeSettingLabels(set){return Object.fromEntries(Object.entries(set).map(([key,value])=>[key,['treePosition','outlinePosition','themeColor'].includes(key) && typeof value==='string'?value.toLowerCase():value]));}
 export function explanationSettings(base=process.env.PLUGIN_DATA || join(homedir(),'.config','markatlas')){
   const path=join(base,'explanation-settings.json');let queue=Promise.resolve();
   function validate(values){for(const [key,value] of Object.entries(values))if(!Object.hasOwn(settingsSchema.properties,key) || (settingsSchema.properties[key].type==='boolean'?typeof value!=='boolean':!settingsSchema.properties[key].enum.includes(value)))throw Error(`Invalid explanation setting: ${key}`);return values;}

@@ -1,16 +1,8 @@
 import assert from 'node:assert/strict';
-import {JSDOM} from 'jsdom';import {build} from 'esbuild';import {readFileSync} from 'node:fs';
-import {defaults,presentSettings,normalizeSettingLabels} from './src/explanation-settings.js';
-import {accentColors} from './src/viewer-settings.js';
+import {defaults,presentSettings,normalizeSettingLabels,settingsSchema} from './src/explanation-settings.js';
 const presented=presentSettings({...defaults,treePosition:'right'});
-assert.deepEqual(presented.schema.properties.treePosition.enum,['Left','Right']);assert.equal(presented.values.treePosition,'Right');assert.equal(presented.preferences.treePosition,'right');assert.equal(presented.schema.properties.showGitChanges.title,'Show git changes');assert.equal(presented.schema.properties.themeColor,undefined);assert.ok(presented.layout[0].items.some(item=>item.tool==='markatlas_theme_color'));
-assert.deepEqual(normalizeSettingLabels({treePosition:'Left',outlinePosition:'Right',themeColor:'purple'}),{treePosition:'left',outlinePosition:'right',themeColor:'purple'});
-const source=readFileSync(new URL('./src/theme-color.js',import.meta.url),'utf8').replace("import {App} from '@modelcontextprotocol/ext-apps';",`class App {constructor(){window.app=this;}async connect(){}getHostContext(){return {theme:'light',styles:{variables:{'--color-text-info':'#ff88bb'}}};}async callServerTool({name,arguments:args}){if(name==='markatlas_settings_read')return {structuredContent:{preferences:{themeColor:'purple'}}};window.saved=args.set;return window.fail?{isError:true,content:[{type:'text',text:'Save failed'}]}:{structuredContent:{}};}}`);
-const bundle=await build({stdin:{contents:source,resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false});
-const dom=new JSDOM(readFileSync(new URL('./src/theme-color.html',import.meta.url),'utf8'),{runScripts:'outside-only',url:'https://theme.test'}),w=dom.window;w.CSS={supports:()=>true};w.eval(bundle.outputFiles[0].text);const flush=()=>new Promise(r=>setTimeout(r,0));await flush();
-const buttons=()=>[...w.document.querySelectorAll('button')];assert.equal(buttons().length,10);assert.equal(w.document.querySelector('[aria-checked=true]').dataset.color,'purple');assert.equal(w.document.documentElement.style.getPropertyValue('--markatlas-accent'),'#ff88bb');
-for(const button of buttons()){const color=button.dataset.color;assert.equal(button.querySelectorAll('.swatch').length,1);assert.match(button.textContent,/^[A-Z]/);if(color!=='host')assert.equal(button.querySelector('.swatch').style.getPropertyValue('--sample'),accentColors[color][0]);}
-w.document.querySelector('[data-color=teal]').click();await flush();assert.equal(w.saved.themeColor,'teal');assert.equal(w.document.querySelector('[aria-checked=true]').dataset.color,'teal');
-w.fail=true;w.document.querySelector('[data-color=red]').click();await flush();assert.equal(w.document.querySelector('[aria-checked=true]').dataset.color,'teal');assert.equal(w.document.getElementById('status').textContent,'Save failed');
-w.app.onhostcontextchanged({theme:'dark'});assert.equal(w.document.querySelector('[data-color=teal] .swatch').style.getPropertyValue('--sample'),accentColors.teal[1]);
-dom.window.close();console.log('Sentence-case settings, legacy value mapping, all color dots, host accent, selection save/failure and dark palette passed');
+assert.deepEqual(presented.schema.properties.treePosition.enum,['Left','Right']);assert.equal(presented.values.treePosition,'Right');assert.equal(presented.preferences.treePosition,'right');assert.equal(presented.schema.properties.showGitChanges.title,'Show git changes');
+assert.ok(presented.layout[0].items.some(item=>item.property==='themeColor'));assert.ok(!presented.layout[0].items.some(item=>item.tool==='markatlas_theme_color'));
+for(const color of settingsSchema.properties.themeColor.enum){const label=color[0].toUpperCase()+color.slice(1);assert.ok(presented.schema.properties.themeColor.enum.includes(label));assert.equal(presentSettings({...defaults,themeColor:color}).values.themeColor,label);assert.equal(normalizeSettingLabels({themeColor:label}).themeColor,color);assert.equal(normalizeSettingLabels({themeColor:color}).themeColor,color);}
+assert.deepEqual(normalizeSettingLabels({treePosition:'Left',outlinePosition:'Right',themeColor:'Purple'}),{treePosition:'left',outlinePosition:'right',themeColor:'purple'});
+console.log('Native theme dropdown, sentence-case labels and backward-compatible preference values passed');

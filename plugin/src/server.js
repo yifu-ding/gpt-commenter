@@ -179,14 +179,8 @@ server.registerTool('markatlas_settings_read',{
   title:'MarkAtlas settings',inputSchema:{},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
 },async()=>({content:[],structuredContent:{...presentSettings(await explanationPreferences.read()),recentHistoryRevision:await explanationPreferences.historyRevision()}}));
 server.registerTool('markatlas_settings_update',{
-  title:'Update MarkAtlas settings',inputSchema:{set:z.object({explanationModel:z.enum(settingsSchema.properties.explanationModel.enum).optional(),treePosition:z.enum(['Left','Right','left','right']).optional(),themeColor:z.enum(settingsSchema.properties.themeColor.enum).optional(),showGitChanges:z.boolean().optional(),outlinePosition:z.enum(['Left','Right','left','right']).optional()}).strict()},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+  title:'Update MarkAtlas settings',inputSchema:{set:z.object({explanationModel:z.enum(settingsSchema.properties.explanationModel.enum).optional(),treePosition:z.enum(['Left','Right','left','right']).optional(),themeColor:z.enum([...settingsSchema.properties.themeColor.enum,...settingsSchema.properties.themeColor.enum.map(value=>value[0].toUpperCase()+value.slice(1))]).optional(),showGitChanges:z.boolean().optional(),outlinePosition:z.enum(['Left','Right','left','right']).optional()}).strict()},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
 },async({set})=>({content:[],structuredContent:presentSettings(await explanationPreferences.update(normalizeSettingLabels(set)))}));
-const THEME_COLOR_URI='ui://gpt-commenter/theme-color';
-registerAppResource(server,'Theme color',THEME_COLOR_URI,{},async()=>({contents:[{uri:THEME_COLOR_URI,mimeType:RESOURCE_MIME_TYPE,text:readFileSync(new URL('../src/theme-color.html',here),'utf8').replace('/* SCRIPT */',()=>readFileSync(new URL('./theme-color.js',here),'utf8'))}]}));
-registerAppTool(server,'markatlas_theme_color',{
- title:'Theme color…',description:'Choose a theme color with a color sample. Host follows the host accent.',inputSchema:{},
- annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:{ui:{resourceUri:THEME_COLOR_URI}}
-},async()=>({content:[],structuredContent:{status:'ready'}}));
 const CLEAR_HISTORY_URI='ui://gpt-commenter/clear-recent-history';
 registerAppResource(server,'Clear recently opened',CLEAR_HISTORY_URI,{},async()=>({contents:[{uri:CLEAR_HISTORY_URI,mimeType:RESOURCE_MIME_TYPE,text:readFileSync(new URL('../src/clear-history.html',here),'utf8').replace('/* SCRIPT */',()=>readFileSync(new URL('./clear-history.js',here),'utf8'))}]}));
 registerAppTool(server,'markatlas_clear_recently_opened',{

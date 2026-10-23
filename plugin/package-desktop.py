@@ -32,7 +32,6 @@ with tempfile.TemporaryDirectory(prefix='markatlas-package-') as temporary:
     (stage / 'src').mkdir()
     shutil.copy2(source / 'src/viewer.html', stage / 'src/viewer.html')
     shutil.copy2(source / 'src/clear-history.html', stage / 'src/clear-history.html')
-    shutil.copy2(source / 'src/theme-color.html', stage / 'src/theme-color.html')
     (stage / 'runtime').mkdir()
     shutil.copy2(node, stage / 'runtime/node')
     shutil.copy2(repo / 'LICENSE', stage / 'LICENSE')
