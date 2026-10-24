@@ -736,7 +736,7 @@ async function submitNote() {
   if(previous)items = items.map(x=>x.id === previous.id ? item : x);else items.push(item);
   if(kind==='explanation'){delete item.explanationRequestId;delete item.explanationAnswer;delete item.explanationError;item.explanationStatus='starting';}
   const saved = persist();const current = revision;
-  if(kind==='explanation'){render();open(item,item,selectionAnchor);}else close(true);
+  if(kind==='explanation'){render();open(item,item,selectionAnchor);}else{if(item.pdf && $('document').contains(window.getSelection()?.anchorNode))window.getSelection().removeAllRanges();close(true);}
   updateStatus(saved ? (kind === 'explanation' ? 'Generating explanation…' : 'Comment queued for review.') : 'Saved for this session only.');
   try {
     try{await syncAnnotations(item.id);item.liveReference=true;if(current===revision)persist();await flushProjectState();}catch(error){updateStatus(`Comment kept locally; disk save failed: ${error.message}`);}
