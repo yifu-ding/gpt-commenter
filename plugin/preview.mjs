@@ -1,3 +1,4 @@
+import {patchStore} from './src/patch-store.js';
 import {revealInFinder} from './src/finder.js';
 import {webPreviewService} from './src/web-preview.js';
 import {singleFileService} from './src/single-file.js';
@@ -17,6 +18,7 @@ import {explanationSettings,settingsSchema,settingsLayout,presentSettings} from 
 const base=fileURLToPath(new URL('.',import.meta.url)),root=resolve(process.argv[2] || process.cwd());
 const chooseFolder=createFolderPicker({bundle:join(base,'dist/FolderPicker.app')}),chooseFile=createFolderPicker({mode:'file',bundle:join(base,'dist/FolderPicker.app')});
 const workspace=workspaceAccess(async()=>[{uri:new URL('file://'+root).href}]),latex=latexService(workspace),reviews=reviewStore(join(tmpdir(),'commenter-latex-state')),explanations=explanationStore(join(tmpdir(),'commenter-latex-state'));
+const patches=patchStore(workspace,latex);
 const webPreviews=webPreviewService(workspace);
 const singleFiles=singleFileService(workspace,join(tmpdir(),'commenter-latex-state'));
 let source=readFileSync(`${base}/src/viewer.js`,'utf8');
@@ -29,7 +31,12 @@ createServer(async(req,res)=>{
   res.setHeader('Content-Type','application/json');
   if(req.url==='/message'){writeFileSync(join(tmpdir(),'latex-preview-message.json'),body);res.end('{}');return;}
   try{const {name,arguments:a}=JSON.parse(body);let data;
-   if(name==='markatlas_settings_read')data={...presentSettings(await explanationSettings().read()),recentHistoryRevision:await explanationSettings().historyRevision()};
+   if(name==='list_review_patches')data=await patches.list(a.root,a.path);
+   else if(name==='read_review_patch')data=await patches.read(a.root,a.path,a.id);
+   else if(name==='create_review_patch')data=await patches.create(a);
+   else if(name==='update_review_patch')data=await patches.update(a);
+   else if(name==='apply_review_patch')data=await patches.apply(a);
+   else if(name==='markatlas_settings_read')data={...presentSettings(await explanationSettings().read()),recentHistoryRevision:await explanationSettings().historyRevision()};
    else if(name==='open_html_web_preview')data=await webPreviews.open(a.root,a.path);
    else if(name==='open_review_single_file')data=await singleFiles.open(a);
    else if(name==='choose_review_file'){const path=await chooseFile();data=path?await singleFiles.open({path}):{cancelled:true};}
