@@ -304,5 +304,11 @@ body.resizing-outline{cursor:col-resize;user-select:none}body.resizing-outline i
 /* Match reading-view blockquotes in the live editor without theme indentation. */
 #document .cm-markdown-preview.markdown-rendered blockquote:not(.callout){margin-inline:0!important;padding:0 0 0 18px!important;border:0!important;border-left:3px solid #bfc2c7!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
 #document .cm-markdown-preview.markdown-rendered blockquote:not(.callout)::before,#document .cm-markdown-preview.markdown-rendered blockquote:not(.callout)::after{content:none!important}
-#document mark[data-annotation].annotation-active,#document .cm-review-note.annotation-active:not(.pending-selection){background:#b9d9f5c9!important;text-decoration-color:#729fc5}
+/* Shared annotation states: native selection, blue draft, theme-colored saved note. */
+#document mark[data-annotation],#document .cm-review-note:not(.pending-selection),#document mark[data-annotation].annotation-active,#document .cm-review-note.annotation-active:not(.pending-selection){background:color-mix(in srgb,var(--markatlas-accent,#1687d9) 24%,transparent)!important;color:inherit;text-decoration:none!important;border:0;border-radius:2px;cursor:pointer}
+#document mark[data-annotation]:hover,#document .cm-review-note:not(.pending-selection):hover{background:color-mix(in srgb,var(--markatlas-accent,#1687d9) 36%,transparent)!important}
+#document .pending-selection,#document mark[data-annotation].pending-selection{background:#9fc7ff88!important;text-decoration:none!important;outline:none;border:0;border-radius:2px}
+::highlight(markatlas-selection){background:#9fc7ff88;text-decoration:none}
+#document .pdf-text ::highlight(markatlas-selection){color:transparent}
+
 </style></body></html>

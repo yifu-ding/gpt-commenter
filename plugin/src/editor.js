@@ -98,6 +98,8 @@ export function createCodeEditor(container,{onChange,onSelection,onNote,onSave})
       if(mode!=='changes')current.dispatch({effects:[notesEffect.of(items),liveNotes.of(items)]});
     },
     destroy,
+    setNotes(items){if(current instanceof EditorView)current.dispatch({effects:[notesEffect.of(items),liveNotes.of(items)]});},
+    clearSelection(){if(current instanceof EditorView)current.dispatch({selection:{anchor:current.state.selection.main.head}});},
     capture(){return current instanceof EditorView?{selection:current.state.selection,top:current.scrollDOM.scrollTop,left:current.scrollDOM.scrollLeft}:null;},
     restore(saved){if(current instanceof EditorView){current.dispatch({selection:saved.selection});current.scrollDOM.scrollTop=saved.top;current.scrollDOM.scrollLeft=saved.left;}},
     findSpan(from,to){if(current instanceof EditorView)current.dispatch({selection:{anchor:from,head:to},effects:EditorView.scrollIntoView(from,{y:'center'})});},

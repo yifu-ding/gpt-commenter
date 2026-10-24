@@ -56,7 +56,7 @@ function frameRuntime(records,channel,sourceLength){
   function sourceSpan(element){const host=element?.closest('[data-markatlas-start]');return {startOffset:host?Number(host.dataset.markatlasStart):0,endOffset:host?Number(host.dataset.markatlasEnd):sourceLength};}
   const button=document.createElement('button');button.textContent='Comment  C';button.hidden=true;button.id='atlas-comment';button.dataset.html2canvasIgnore='true';document.body.append(button);
   button.addEventListener('pointerdown',e=>e.preventDefault());
-  function accept(){if(!offered)return;const selection=getSelection(),range=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;if(range && window.Highlight && CSS.highlights)CSS.highlights.set('atlas-active',new Highlight(range));send('selection',offered);selection?.removeAllRanges();button.hidden=true;}
+  function accept(){if(!offered)return;const selection=getSelection(),range=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;if(range && window.Highlight && CSS.highlights)CSS.highlights.set('atlas-pending',new Highlight(range));send('selection',offered);selection?.removeAllRanges();button.hidden=true;}
   button.addEventListener('click',accept);
   function capture(){
     button.hidden=true;offered=null;if(!enabled||regionMode)return;
@@ -100,7 +100,7 @@ function frameRuntime(records,channel,sourceLength){
     }catch(error){send('error',{message:'Could not capture this HTML region: '+error.message});}
   });
   window.addEventListener('message',e=>{if(e.source!==parent||e.data?.markatlas!==channel)return;const data=e.data;
-    if(data.type==='notes'){notes=data.notes;active=data.active;enabled=data.enabled;if(!enabled)setRegion(false);paint();}
+    if(data.type==='notes'){if(data.accent)document.documentElement.style.setProperty('--markatlas-accent',data.accent);if(!data.pending)window.CSS?.highlights?.delete('atlas-pending');notes=data.notes;active=data.active;enabled=data.enabled;if(!enabled)setRegion(false);paint();}
     if(data.type==='region')setRegion(data.active);
     if(data.type==='locate'){active=data.note.id;paint();const region=data.note.html?.region;if(region)scrollTo({top:Math.max(0,region.y-innerHeight/3),left:region.x});else rangeFor(data.note)?.startContainer.parentElement?.scrollIntoView({block:'center'});}
   });
@@ -110,7 +110,7 @@ export function htmlPreviewDocument(source,baseURL,channel){
   const {tree,records}=htmlTextRecords(source);
   let html=serialize(tree);
   const safe=value=>JSON.stringify(value).replace(/</g,'\\u003c');
-  const style='<style>#atlas-comment{position:fixed;z-index:2147483647;border:1px solid #ded6e8;border-radius:999px;padding:6px 12px;background:white;color:#514060;font:12px system-ui;cursor:pointer}#atlas-comment[hidden]{display:none}::highlight(atlas-notes){background:transparent;text-decoration:underline #888 2px}::highlight(atlas-active){background:transparent;text-decoration:underline #444 2px}</style>';
+  const style='<style>#atlas-comment{position:fixed;z-index:2147483647;border:1px solid #ded6e8;border-radius:999px;padding:6px 12px;background:white;color:#514060;font:12px system-ui;cursor:pointer}#atlas-comment[hidden]{display:none}::highlight(atlas-notes),::highlight(atlas-active){background:color-mix(in srgb,var(--markatlas-accent,#1687d9) 24%,transparent);text-decoration:none}::highlight(atlas-pending){background:#9fc7ff88;text-decoration:none}</style>';
   html=html.replace('<head>',`<head>${baseURL?`<base href="${baseURL.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">`:''}${style}`);
   return html.replace('</body>',`<script>${canvasRuntime.replace(/<\/script/gi,'<\\/script')}</script><script>(${frameRuntime.toString()})(${safe(records)},${safe(channel)},${source.length})</script></body>`);
 }

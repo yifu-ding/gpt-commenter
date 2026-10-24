@@ -26,10 +26,10 @@ paragraphs[1].firstChild.data='changed';select(paragraphs[1].firstChild,0,paragr
 const extra=d.createElement('p');extra.textContent='Dynamic content';d.body.prepend(extra);
 select(paragraphs[0],0,paragraphs[0],1);await new Promise(r=>setTimeout(r,30));d.querySelector('#atlas-comment').click();note=messages.findLast(m=>m.type==='selection');assert.equal(note.html.mapping,'exact');
 // Closing a composer repaints saved notes, removing only the unsaved selection.
-assert.equal(w.CSS.highlights.get('atlas-active').size,1);
+assert.equal(w.CSS.highlights.get('atlas-pending').size,1);
 const saved={id:'saved-note',startOffset:source.indexOf('bold'),endOffset:source.indexOf('bold')+4,selectedText:'bold'};
 w.dispatchEvent(new w.MessageEvent('message',{source:w,data:{markatlas:'test-channel',type:'notes',notes:[saved],active:null,enabled:true}}));
-assert.equal(w.CSS.highlights.get('atlas-active').size,0);
+assert.equal(w.CSS.highlights.has('atlas-pending'),false);assert.equal(w.CSS.highlights.get('atlas-active').size,0);
 assert.equal(w.CSS.highlights.get('atlas-notes').size,1,'saved comments remain highlighted');
 // Region interaction captures the requested rectangle and associates its image.
 w.htmlToImage.toCanvas=async (element,options)=>{assert.equal(options.width,100);assert.equal(options.height,80);return {toDataURL:()=> 'data:image/jpeg;base64,YQ=='};};

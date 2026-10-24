@@ -347,7 +347,7 @@ function markdownOptions(currentPath){
 let htmlFrameState=null;
 function isHtmlPreview(){return /\.html?$/i.test(fileName) && mode==='rendered' && codeMode!=='edit' && !filePreview;}
 function frameNotes(){
-  htmlFrameState?.frame.contentWindow?.postMessage({markatlas:htmlFrameState.channel,type:'notes',notes:items.map(n=>({id:n.id,startOffset:n.startOffset,endOffset:n.endOffset,selectedText:n.selectedText,html:n.html?{...n.html,screenshot:undefined}:undefined})),active:editingId,enabled:commenting},'*');
+  htmlFrameState?.frame.contentWindow?.postMessage({markatlas:htmlFrameState.channel,type:'notes',notes:items.map(n=>({id:n.id,startOffset:n.startOffset,endOffset:n.endOffset,selectedText:n.selectedText,html:n.html?{...n.html,screenshot:undefined}:undefined})),active:editingId,pending:!!pending && !editingId,accent:getComputedStyle(document.documentElement).getPropertyValue('--markatlas-accent').trim(),enabled:commenting},'*');
 }
 function renderHtmlPreview(){
   if(htmlFrameState?.source===source && htmlFrameState.identity===identity && htmlFrameState.frame.isConnected){frameNotes();return;}
@@ -390,7 +390,7 @@ window.addEventListener('message',event=>{
 function render() {
   renderNavigation();updateLayout();
   const active=items.filter(item=>item.anchorStatus!=='deleted' && (item.pdf?.region || item.endOffset>item.startOffset));
-  const visible = pending ? [...active,{...pending,id:'pending-selection',temporary:true}] : active;
+  const visible = pending && !editingId ? [...active,{...pending,id:'pending-selection',temporary:true}] : active;
   updateEditorControls();
   if(isHtmlPreview()){renderHtmlPreview();return;}
   htmlFrameState=null;
@@ -484,7 +484,7 @@ function close(renderDocument=false) {
   stopReply();
   $('composer').hidden = true; pending = null; editingId = null;updateActiveNoteHighlight();
   // Repaint only persisted HTML notes; discard the temporary selected range.
-  frameNotes();
+  frameNotes();codeEditor.setNotes(items);if(filePreview?.kind==='word')wordViewer.show(filePreview,items);
   selectionAnchor = null;document.body.classList.remove('composing');if(renderDocument)render();
   queueMicrotask(()=>fileRefresh.check());
 }
@@ -534,6 +534,8 @@ function open(selection,item = null,anchor = null) {
   setDetail(null); setKind(item?.kind || 'comment',false);
   $('composer').hidden = false;document.body.classList.add('composing');
   hideSelectionAction();
+  codeEditor.setNotes([...items,...(!item?[{...pending,temporary:true}]:[])]);
+  if(filePreview?.kind==='word')wordViewer.show(filePreview,[...items,...(!item?[{...pending,temporary:true}]:[])]);
   const keepSelection=codeMode==='edit' && !item && !pdfDocument;
   updateActiveNoteHighlight();
   if(item){for(const row of $('review-list').querySelectorAll('.review-row'))row.classList.toggle('active',row.dataset.noteId===item.id);if(document.body.classList.contains('comments-open'))$('review-list').querySelector('.active')?.scrollIntoView?.({block:'nearest'});}
@@ -736,7 +738,7 @@ async function submitNote() {
   if(previous)items = items.map(x=>x.id === previous.id ? item : x);else items.push(item);
   if(kind==='explanation'){delete item.explanationRequestId;delete item.explanationAnswer;delete item.explanationError;item.explanationStatus='starting';}
   const saved = persist();const current = revision;
-  if(kind==='explanation'){render();open(item,item,selectionAnchor);}else{if(item.pdf && $('document').contains(window.getSelection()?.anchorNode))window.getSelection().removeAllRanges();close(true);}
+  if(kind==='explanation'){render();open(item,item,selectionAnchor);}else{codeEditor.clearSelection();if(filePreview?.kind==='word')wordViewer.clearSelection();if($('document').contains(window.getSelection()?.anchorNode))window.getSelection().removeAllRanges();close(true);}
   updateStatus(saved ? (kind === 'explanation' ? 'Generating explanation…' : 'Comment queued for review.') : 'Saved for this session only.');
   try {
     try{await syncAnnotations(item.id);item.liveReference=true;if(current===revision)persist();await flushProjectState();}catch(error){updateStatus(`Comment kept locally; disk save failed: ${error.message}`);}
