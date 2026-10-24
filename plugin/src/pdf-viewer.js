@@ -32,7 +32,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
           if(item.pdf.page!==page.number)continue;
           const r=item.pdf.region,mark=window.document.createElement('button');mark.className='pdf-region-note annotation-icon';mark.setAttribute('aria-label',`Screenshot comment on PDF page ${page.number}`);mark.title=item.anchorStatus==='edited'?'PDF changed — review this screenshot comment':item.message || 'Screenshot selection';
           Object.assign(mark.style,{left:`${r.x}px`,top:`${r.y}px`,width:`${r.width}px`,height:`${r.height}px`});
-          if(!item.temporary){mark.textContent=item.kind==='explanation'?'?':'▤';mark.addEventListener('click',event=>{event.stopPropagation();onNote(item,mark.getBoundingClientRect());});}
+          if(!item.temporary){mark.dataset.annotation=item.id;mark.textContent=item.kind==='explanation'?'?':'▤';mark.addEventListener('click',event=>{event.stopPropagation();onNote(item,mark.getBoundingClientRect());});}
           highlights.append(mark);continue;
         }
         const words=page.words.filter(w=>w.endOffset>item.startOffset && w.startOffset<item.endOffset);
@@ -151,6 +151,15 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
     setZoom,wheelZoom,setRegionMode,
     zoom:()=>zoom,
     goToPage(number){const entry=frames.get(Math.max(1,Math.min(frames.size,number)));entry?.frame.scrollIntoView({behavior:'smooth',block:'start'});},
+    goToNote(note){
+      const page=note.pdf?.region?note.pdf.page:document?.pages.find(page=>note.startOffset>=page.startOffset && note.startOffset<page.endOffset)?.number ?? note.pdf?.page;
+      const entry=frames.get(page);if(!entry)return null;
+      const mark=[...entry.highlights.querySelectorAll('[data-annotation]')].find(node=>node.dataset.annotation===note.id);
+      const target=mark || entry.frame;
+      target.scrollIntoView({behavior:'instant',block:mark?'center':'start',inline:'nearest'});
+      currentPage=page;onPage(page,document.pages.length);
+      return mark?.getBoundingClientRect() || null;
+    },
     currentPage:()=>currentPage
   };
 }

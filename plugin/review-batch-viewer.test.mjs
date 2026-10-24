@@ -117,6 +117,8 @@ await window.testPdf({root:'/move-project',path:'main.pdf',main:'main.tex',sourc
 assert.equal($('document').querySelectorAll('.pdf-highlight[data-annotation]').length,2,'saved PDF comments survive an empty older browser draft');
 assert.match($('review-list').textContent,/PDF saved comment 0/);
 assert.match($('review-list').textContent,/PDF saved comment 1/);
+let locatedPdf;window.HTMLElement.prototype.scrollIntoView=function(options){if(this.classList.contains('pdf-highlight'))locatedPdf={node:this,options};};
+$('review-list').querySelector('[data-note-id="pdf-reopen-1"]').click();await flush();assert.equal(locatedPdf.node.dataset.annotation,'pdf-reopen-1');assert.equal(locatedPdf.options.block,'center');assert.equal($('message').value,'PDF saved comment 1');
 window.confirm=()=>false;await window.testDelete('main.pdf');assert.equal(window.deleteCalls,undefined);
 window.confirm=()=>true;window.deleteError=true;await assert.rejects(window.testDelete('main.pdf'),/Trash failed/);assert.equal($('filename').textContent,'main.pdf');
 window.deleteError=false;await window.testDelete('main.pdf');assert.notEqual($('filename').textContent,'main.pdf');assert.equal($('document').querySelectorAll('.pdf-highlight').length,0);

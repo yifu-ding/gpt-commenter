@@ -214,7 +214,7 @@ function renderBatch(){
 async function locateReviewEntry(entry,local=false){
   if(!local && splitView?.activePane()==='secondary')return splitView.call('locateReview',entry);
   if(entry.identity!==identity)await openPaneFile(entry.root,entry.path);
-  if(entry.identity===identity){$('review-batch').classList.add('preview-dismissed');const note=items.find(n=>n.id===entry.item.id)||entry.item;open(note,note);}
+  if(entry.identity===identity){$('review-batch').classList.add('preview-dismissed');const note=items.find(n=>n.id===entry.item.id)||entry.item;open(note,note);if(pdfDocument && note.pdf){selectionAnchor=pdfViewer.goToNote(note);positionComposer();}}
 }
 function pruneReviewNotes(ids){
   for(const id of ids){const entry=batchEntries.get(id);if(entry?.identity)dirtyIdentities.add(entry.identity);removedNoteIds.add(id);batchEntries.delete(id);}

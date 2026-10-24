@@ -14,6 +14,14 @@ window.getSelection().removeAllRanges();words[0].click();assert.equal(opened.id,
 const firstWord=words[0];viewer.show(data,[note]);assert.equal(container.querySelector('.pdf-word'),firstWord,'opening notes does not replace the text layer');
 range.setStart(words[1].firstChild,0);range.setEnd(words[2].firstChild,6);window.getSelection().removeAllRanges();window.getSelection().addRange(range);words[2].dispatchEvent(new window.Event('pointerup',{bubbles:true}));assert.equal(selected.pdf.endPage,2,'cross-page selections retain both page numbers');
 viewer.setZoom(2);assert.equal(container.querySelector('.pdf-frame').style.width,'200px');viewer.setZoom(99);assert.equal(viewer.zoom(),16);viewer.setZoom(8);assert.equal(viewer.zoom(),8,'zoom beyond 300% is supported');viewer.setZoom(.1);assert.equal(viewer.zoom(),.5);viewer.setZoom(1);assert.equal(viewer.zoom(),1);
+// Sidebar navigation targets the actual marked passage, including a later page.
+let jumped;
+window.HTMLElement.prototype.scrollIntoView=function(options){jumped={node:this,options};};
+const laterNote={id:'later',kind:'comment',startOffset:22,endOffset:29,pdf:{page:2}};
+viewer.show(data,[laterNote]);viewer.goToNote(laterNote);
+assert.equal(jumped.node.dataset.annotation,'later');assert.equal(jumped.node.closest('.pdf-frame').dataset.pdfPage,'2');assert.equal(jumped.options.block,'center');assert.equal(viewer.currentPage(),2);
+viewer.goToNote({...laterNote,id:'missing'});assert.equal(jumped.node.dataset.pdfPage,'2');assert.equal(jumped.options.block,'start');
+viewer.show(data,[note]);
 const ordinaryScroll=new window.WheelEvent('wheel',{deltaY:100,bubbles:true,cancelable:true});container.dispatchEvent(ordinaryScroll);assert.equal(viewer.zoom(),1);assert.equal(ordinaryScroll.defaultPrevented,false,'ordinary wheel scrolling stays available');
 for(const modifier of ['ctrlKey','metaKey']){const wheel=new window.WheelEvent('wheel',{deltaY:-50,[modifier]:true,bubbles:true,cancelable:true});container.dispatchEvent(wheel);assert.equal(wheel.defaultPrevented,true);assert.ok(viewer.zoom()>1,'modified wheel zooms the PDF');viewer.setZoom(1);}
 viewer.wheelZoom(new window.WheelEvent('wheel',{deltaY:50,cancelable:true}));assert.ok(viewer.zoom()<1,'the floating control can zoom with an unmodified wheel');
@@ -41,6 +49,7 @@ assert.ok(Math.abs(selected.pdf.region.x-30*600/rect.width)<.001);assert.equal(s
 assert.equal(container.classList.contains('pdf-region-mode'),false);assert.equal(pageFrames[0].querySelector('.pdf-region-drag'),null);
 viewer.show(data,[{...selected,id:'region',kind:'comment',message:'Review this diagram'}]);
 assert.ok(pageFrames[0].querySelector('.pdf-region-note'),'graphics-only selections retain a visible review marker');
+viewer.goToNote({...selected,id:'region'});assert.equal(jumped.node.dataset.annotation,'region');
 viewer.setRegionMode(true);window.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape'}));assert.equal(container.classList.contains('pdf-region-mode'),false);
 // A long extracted word must not make a short selection highlight the whole line.
 const sentence='其中表示一次计算的词元数；对展平后的线性层',word={text:sentence,x:20,y:30,width:sentence.length*10,height:12,startOffset:0,endOffset:sentence.length};
