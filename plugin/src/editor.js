@@ -1,3 +1,4 @@
+import {markdownEnter} from './markdown-enter.js';
 import {markdownShortcuts} from './markdown-shortcuts.js';
 import {fallbackHighlight} from './code-highlight.js';
 import {properties} from '@codemirror/legacy-modes/mode/properties';
@@ -14,7 +15,7 @@ import {go} from '@codemirror/legacy-modes/mode/go';
 import {shell} from '@codemirror/legacy-modes/mode/shell';
 import {yaml} from '@codemirror/legacy-modes/mode/yaml';
 import {githubLight} from '@uiw/codemirror-theme-github';
-import {liveMarkdown,liveNotes} from './live-markdown.js';
+import {liveMarkdown,liveNotes,revealBlock} from './live-markdown.js';
 import {EditorView,basicSetup} from 'codemirror';
 import {EditorState,StateEffect,StateField,Prec} from '@codemirror/state';
 import {Decoration,keymap} from '@codemirror/view';
@@ -66,26 +67,39 @@ const theme=EditorView.theme({
   '&.cm-focused':{outline:'none'},'.cm-scroller':{overflow:'auto'}
 });
 export function createCodeEditor(container,{onChange,onSelection,onNote,onSave}) {
-  let current=null,key='',lastOriginal='',noteItems=[];
+  let current=null,key='',lastOriginal='',noteItems=[],markdownBottomClick=false;
+  const blankSurface=container.parentElement?.tagName==='MAIN'?container.parentElement:container;
+  blankSurface.addEventListener('mousedown',event=>{
+    if(!markdownBottomClick || !(current instanceof EditorView) || event.button!==0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)return;
+    const view=current;
+    if(![blankSurface,container,view.dom,view.scrollDOM,view.contentDOM].includes(event.target))return;
+    const end=view.state.doc.length;
+    if(view.viewport.to<end || event.clientY<view.documentTop+view.lineBlockAt(end).bottom)return;
+    event.preventDefault();event.stopPropagation();
+    view.dispatch({selection:{anchor:end},effects:revealBlock.of(end)});view.focus();
+  },true);
   function destroy(){current?.destroy();current=null;key='';container.replaceChildren();}
   function marks(items){noteItems=items;const ranges=[];for(const item of items){if(item.pdf?.region || item.startOffset<0 || item.endOffset<=item.startOffset || item.endOffset>current.state.doc.length)continue;ranges.push(Decoration.mark({class:item.temporary?'cm-review-note pending-selection':'cm-review-note',attributes:item.temporary?{}:{'data-annotation':item.id,'data-note-kind':item.kind,role:'button',tabindex:'0','aria-label':`Review note on lines ${item.startLine}–${item.endLine}`},inclusiveEnd:true}).range(item.startOffset,item.endOffset));}return Decoration.set(ranges,true);}
   const notes=StateField.define({create:()=>Decoration.none,update(value,tr){for(const effect of tr.effects)if(effect.is(notesEffect))return marks(effect.value);return value.map(tr.changes);},provide:field=>EditorView.decorations.from(field)});
   function extensions(name,readOnly,review){return [basicSetup,githubLight,theme,language(name),indentUnit.of('    '),EditorState.tabSize.of(4),Prec.highest(keymap.of([{key:'Tab',run:insertIndent,shift:indentLess}])),...(!readOnly && /\.(md|markdown)$/i.test(name)?markdownShortcuts():[]),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),keymap.of([{key:'Mod-s',run:()=>{onSave();return true;}}]),...(review?[notes]:[])];}
   return {
     show({name,text,original,mode,items=[],live=false,markdownOptions={}}) {
+      markdownBottomClick=mode==='edit' && live && /\.(md|markdown)$/i.test(name);
       const nextKey=`${name}:${mode}:${live}`;
       const same=current && key===nextKey && (mode==='changes' ? lastOriginal===original && current.b.state.doc.toString()===text : current.state.doc.toString()===text);
       if(!same){destroy();key=nextKey;lastOriginal=original;
         if(mode==='changes') {
           current=new MergeView({parent:container,a:{doc:original,extensions:extensions(name,true,false)},b:{doc:text,extensions:extensions(name,true,false)},highlightChanges:true,gutter:true,collapseUnchanged:{margin:3,minSize:8}});
         } else {
-          current=new EditorView({parent:container,doc:text,extensions:[...extensions(name,mode!=='edit',true),...(live?liveMarkdown(markdownOptions):[]),EditorView.contentAttributes.of({'aria-label':mode==='edit' ? (/\.(md|markdown)$/i.test(name)?(live?'Markdown live editor':'Markdown source editor'):'Code editor') : 'Source review'}),EditorView.updateListener.of(update=>{if(update.docChanged){const updated=onChange(update.state.doc.toString(),update.changes,update.startState.selection.main.head);if(updated)queueMicrotask(()=>{if(current===update.view && current.state.doc===update.state.doc)current.dispatch({effects:[notesEffect.of(updated.filter(item=>item.anchorStatus!=='deleted')),liveNotes.of(updated.filter(item=>item.anchorStatus!=='deleted'))]});});}}),EditorView.domEventHandlers({click:(event,view)=>{const target=event.target.closest?.('.cm-review-note[data-annotation]');if(!target || !view.state.selection.main.empty)return false;const note=noteItems.find(item=>item.id===target.dataset.annotation);if(!note)return false;event.preventDefault();event.stopPropagation();onNote(note,target.getBoundingClientRect());return true;},pointerup:(e,view)=>{if(e.target.closest?.('.annotation-icon'))return false;if(mode!=='changes')queueMicrotask(()=>capture(view));return false;},keyup:(_e,view)=>{if(mode!=='changes')capture(view);return false;}})]});
+          current=new EditorView({parent:container,doc:text,extensions:[...extensions(name,mode!=='edit',true),...(live?[...liveMarkdown(markdownOptions),Prec.highest(keymap.of([{key:'Enter',run:markdownEnter}]))]:[]),EditorView.contentAttributes.of({'aria-label':mode==='edit' ? (/\.(md|markdown)$/i.test(name)?(live?'Markdown live editor':'Markdown source editor'):'Code editor') : 'Source review'}),EditorView.updateListener.of(update=>{if(update.docChanged){const updated=onChange(update.state.doc.toString(),update.changes,update.startState.selection.main.head);if(updated)queueMicrotask(()=>{if(current===update.view && current.state.doc===update.state.doc)current.dispatch({effects:[notesEffect.of(updated.filter(item=>item.anchorStatus!=='deleted')),liveNotes.of(updated.filter(item=>item.anchorStatus!=='deleted'))]});});}}),EditorView.domEventHandlers({click:(event,view)=>{const target=event.target.closest?.('.cm-review-note[data-annotation]');if(!target || !view.state.selection.main.empty)return false;const note=noteItems.find(item=>item.id===target.dataset.annotation);if(!note)return false;event.preventDefault();event.stopPropagation();onNote(note,target.getBoundingClientRect());return true;},pointerup:(e,view)=>{if(e.target.closest?.('.annotation-icon'))return false;if(mode!=='changes')queueMicrotask(()=>capture(view));return false;},keyup:(_e,view)=>{if(mode!=='changes')capture(view);return false;}})]});
         }
       }
 
       if(mode!=='changes')current.dispatch({effects:[notesEffect.of(items),liveNotes.of(items)]});
     },
     destroy,
+    setNotes(items){if(current instanceof EditorView)current.dispatch({effects:[notesEffect.of(items),liveNotes.of(items)]});},
+    clearSelection(){if(current instanceof EditorView)current.dispatch({selection:{anchor:current.state.selection.main.head}});},
     capture(){return current instanceof EditorView?{selection:current.state.selection,top:current.scrollDOM.scrollTop,left:current.scrollDOM.scrollLeft}:null;},
     restore(saved){if(current instanceof EditorView){current.dispatch({selection:saved.selection});current.scrollDOM.scrollTop=saved.top;current.scrollDOM.scrollLeft=saved.left;}},
     findSpan(from,to){if(current instanceof EditorView)current.dispatch({selection:{anchor:from,head:to},effects:EditorView.scrollIntoView(from,{y:'center'})});},

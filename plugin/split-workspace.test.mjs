@@ -20,6 +20,14 @@ let state={entries:[entry('a','one')],drafts:{one:{text:'one',items:[{id:'a'}]}}
 state=mergeProjectState(state,{entries:[entry('b','two')],drafts:{two:{text:'two',items:[{id:'b'}]}},changedIdentities:['two']});assert.deepEqual(state.entries.map(([id])=>id),['a','b']);assert.equal(state.drafts.one.text,'one');
 state=mergeProjectState(state,{entries:[entry('c','one')],drafts:{one:{text:'edited',items:[{id:'c'}]}},changedIdentities:['one'],removedIds:['a']});assert.deepEqual(state.entries.map(([id])=>id),['b','c']);assert.equal(state.drafts.two.text,'two');
 state=mergeProjectState(state,{entries:[],drafts:{},changedIdentities:[],removedIds:['b']});assert.deepEqual(state.entries.map(([id])=>id),['c']);assert.deepEqual(state.drafts.two.items,[]);
+// An older pane cannot erase unsubmitted notes or resurrect explicitly removed notes.
+const pdfIdentity='latex:/thesis/main.tex',pdfNote={id:'pdf-note',kind:'comment',updatedAt:'2026-10-23T12:42:00Z'};
+let pdfState={entries:[['pdf-note',{identity:pdfIdentity,item:pdfNote}]],drafts:{[pdfIdentity]:{text:'PDF text',base:'PDF text',items:[pdfNote]}}};
+pdfState=mergeProjectState(pdfState,{entries:[],drafts:{[pdfIdentity]:{text:'PDF text',base:'PDF text',items:[]}},changedIdentities:[pdfIdentity]});
+assert.equal(pdfState.entries.length,1);assert.equal(pdfState.drafts[pdfIdentity].items.length,1);
+pdfState=mergeProjectState(pdfState,{entries:[],drafts:{},changedIdentities:[],removedIds:['pdf-note']});
+pdfState=mergeProjectState(pdfState,{entries:[['pdf-note',{identity:pdfIdentity,item:pdfNote}]],drafts:{[pdfIdentity]:{text:'PDF text',items:[pdfNote]}},changedIdentities:[pdfIdentity]});
+assert.equal(pdfState.entries.length,0);assert.equal(pdfState.drafts[pdfIdentity].items.length,0);
 const {createPaneBridge}=await import('./src/pane-bridge.js');let calls=0;const peer={postMessage(){}},bridge=createPaneBridge(()=>peer,'secret',{save:()=>{calls++;}});
 for(const [source,token] of [[{},'secret'],[peer,'wrong'],[peer,'secret']])window.dispatchEvent(new window.MessageEvent('message',{source,data:{markatlasPane:token,id:1,method:'save'}}));assert.equal(calls,1);bridge.destroy();
 const {createSplitView}=await import('./src/split-view.js');document.body.innerHTML='<div id="primary-pane"><strong id="filename">First</strong></div>';

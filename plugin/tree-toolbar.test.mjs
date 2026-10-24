@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';import {JSDOM} from 'jsdom';import {createTreeToolbar} from './src/tree-toolbar.js';
+const dom=new JSDOM('<div id="tools"></div>',{pretendToBeVisual:true});for(const key of ['window','document','MutationObserver'])globalThis[key]=dom.window[key];
+const toolbar=document.querySelector('#tools');let width=264;toolbar.getBoundingClientRect=()=>({width});
+let calls=0;const actions=Array.from({length:8},(_,i)=>{const button=document.createElement('button');button.id='action-'+i;button.className='folder-button';button.setAttribute('aria-label','Action '+i);button.innerHTML='<svg></svg>';button.onclick=()=>calls++;toolbar.append(button);return button;});
+const controls=createTreeToolbar(toolbar),more=document.getElementById('tree-tools-more'),menu=document.getElementById('tree-tools-overflow');
+const ids=parent=>[...parent.querySelectorAll('button')].filter(b=>b!==more).map(b=>b.id);
+assert.equal(more.hidden,true);assert.equal(ids(toolbar).length,8);
+width=200;controls.update();assert.deepEqual(ids(toolbar),actions.slice(0,5).map(b=>b.id));assert.deepEqual(ids(menu),actions.slice(5).map(b=>b.id));assert.equal(more.hidden,false);
+width=120;controls.update();assert.deepEqual(ids(menu),actions.slice(2).map(b=>b.id),'overflow preserves original order after narrowing');
+more.click();assert.equal(menu.hidden,false);assert.equal(menu.querySelectorAll('svg').length,6);assert.equal(menu.querySelector('.tree-overflow-label').textContent,'Action 2');
+actions[2].click();assert.equal(calls,1);assert.equal(menu.hidden,true);
+more.click();menu.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert.equal(menu.hidden,true);assert.equal(document.activeElement,more);
+width=300;controls.update();assert.equal(more.hidden,true);assert.deepEqual(ids(toolbar),actions.map(b=>b.id));assert.equal(menu.children.length,0);
+width=35;controls.update();assert.equal(ids(toolbar).length,0);more.click();assert.equal(menu.children.length,8);
+actions[2].innerHTML='<svg><path/></svg>';actions[2].setAttribute('aria-label','Hide hidden files');await new Promise(r=>setTimeout(r,0));assert.equal(actions[2].querySelector('.tree-overflow-label').textContent,'Hide hidden files');
+document.body.dispatchEvent(new window.MouseEvent('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
+dom.window.close();console.log('Toolbar overflow: width thresholds, order, icon labels, original handlers, keyboard/outside dismissal, resizing and dynamic labels passed');

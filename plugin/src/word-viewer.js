@@ -47,7 +47,7 @@ export async function renderWordPreview(data, doc = document) {
     if (text.length > 5 * 1024 * 1024) throw Error("Extracted Word text exceeds 5 MB.");
     const digest = await doc.defaultView.crypto.subtle.digest("SHA-256", bytes);
     const fingerprint = Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;background:#eef0f3;color:#222;font-family:Arial,sans-serif}body{overflow:auto}.word-page-wrapper{display:flex!important;flex-direction:column!important;align-items:center!important;gap:24px!important;padding:24px!important;box-sizing:border-box!important;background:transparent!important;min-width:100%}section.word-page{margin:0!important;transform-origin:top left;box-shadow:none!important}.word-frame{position:relative;flex-shrink:0;box-sizing:content-box;background:white;border:1px solid #cdd3dc;border-radius:3px;box-shadow:0 3px 18px #00000012;overflow:hidden}img{max-width:100%}a{color:#3977c6;text-decoration:underline}.word-review-overlay{position:absolute;inset:0;z-index:10;pointer-events:none}.word-review-highlight{position:absolute;background:transparent;border-bottom:2px solid #888;border-radius:0}.word-review-note{position:absolute;pointer-events:auto;border:1px solid #91b9ed;background:#e4f0ff;color:#245c9e;border-radius:4px;font:11px system-ui;cursor:pointer}</style></head><body>${safe.innerHTML}</body></html>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;background:#eef0f3;color:#222;font-family:Arial,sans-serif}body{overflow:auto}.word-page-wrapper{display:flex!important;flex-direction:column!important;align-items:center!important;gap:24px!important;padding:24px!important;box-sizing:border-box!important;background:transparent!important;min-width:100%}section.word-page{margin:0!important;transform-origin:top left;box-shadow:none!important}.word-frame{position:relative;flex-shrink:0;box-sizing:content-box;background:white;border:1px solid #cdd3dc;border-radius:3px;box-shadow:0 3px 18px #00000012;overflow:hidden}img{max-width:100%}a{color:#3977c6;text-decoration:underline}.word-review-overlay{position:absolute;inset:0;z-index:10;pointer-events:none}.word-review-highlight{position:absolute;background:color-mix(in srgb,var(--markatlas-accent,#1687d9) 24%,transparent);border:0;border-radius:2px;mix-blend-mode:multiply}.word-review-highlight.pending-selection{background:#9fc7ff88}.word-review-note{position:absolute;pointer-events:auto;border:1px solid #91b9ed;background:#e4f0ff;color:#245c9e;border-radius:4px;font:11px system-ui;cursor:pointer}</style></head><body>${safe.innerHTML}</body></html>`;
     return { html: html, text: text, fingerprint };
   } catch (error) {
     throw Error(`Cannot render Word document: ${error.message}`);
@@ -141,6 +141,7 @@ export function createWordViewer(container, { onSelection, onNote, onDismiss = (
   function marks() {
     if (!index || !frame.contentDocument?.body) return;
     const doc = frame.contentDocument, win = frame.contentWindow;
+    doc.documentElement.style.setProperty('--markatlas-accent',window.getComputedStyle(container).getPropertyValue('--markatlas-accent').trim() || '#1687d9');
     doc.querySelector(".word-review-overlay")?.remove();
     const overlay = doc.createElement("div");
     overlay.className = "word-review-overlay";
@@ -154,7 +155,7 @@ export function createWordViewer(container, { onSelection, onNote, onDismiss = (
       const rects = Array.from(range.getClientRects());
       for (const rect2 of rects) {
         const mark = doc.createElement("span");
-        mark.className = "word-review-highlight";
+        mark.className = "word-review-highlight"+(note.temporary?" pending-selection":"");
         Object.assign(mark.style, { left: `${rect2.left + win.scrollX}px`, top: `${rect2.top + win.scrollY}px`, width: `${rect2.width}px`, height: `${rect2.height}px` });
         if(!note.temporary){mark.dataset.annotation=note.id;mark.tabIndex=0;mark.setAttribute('role','button');mark.setAttribute('aria-label','Open Word review note');const activate=event=>{event.stopPropagation();onNote(note,anchor(mark.getBoundingClientRect()));};mark.addEventListener('click',activate);mark.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();activate(event);}});}
         overlay.append(mark);
@@ -182,6 +183,7 @@ export function createWordViewer(container, { onSelection, onNote, onDismiss = (
     onSelection({ startOffset: start, endOffset: end, startLine: index.text.slice(0, start).split("\n").length, endLine: index.text.slice(0, end - 1).split("\n").length, selectedText: index.text.slice(start, end), mappingStatus: "exact", word: { fingerprint: current.fingerprint } }, anchor(rect));
   }
   return {
+    clearSelection(){frame?.contentWindow?.getSelection()?.removeAllRanges();},
     show(preview, items2) {
       notes = items2;
       if (current === preview && frame?.isConnected) {

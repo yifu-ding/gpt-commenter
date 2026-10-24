@@ -1,6 +1,7 @@
-export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPreview,onNativePreview,onRename}) {
+export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPreview,onNativePreview,onRename,onCreate,onDelete}) {
   let selected=null,opener=null;
   if(onRename){const button=document.createElement('button');button.dataset.action='rename';button.textContent='Rename';menu.append(button);}
+  for(const [action,label,handler] of [['new-folder','New folder',onCreate],['new-file','New file',onCreate],['delete','Delete',onDelete]])if(handler){const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.dataset.action=action;button.textContent=label;menu.append(button);}
   let cancelRename=null;
   function startRename(target){
     if(!onRename || !root())return;cancelRename?.();
@@ -18,7 +19,7 @@ export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPre
     });
     input.addEventListener('blur',()=>{if(!input.disabled)cancel();});input.focus();input.select();
   }
-  tree.addEventListener('dblclick',event=>{const target=event.target.closest('[data-project-path],summary');if(!target || event.target.closest('input'))return;event.preventDefault();event.stopPropagation();startRename(target);});
+  tree.addEventListener('dblclick',event=>{const label=event.target.closest('.file-label');if(!label || event.target.closest('input'))return;const target=label.closest('[data-project-path],summary');if(!target || !tree.contains(target))return;event.preventDefault();event.stopPropagation();startRename(target);});
   const buttons=[...menu.querySelectorAll('button')];
   function close(restoreFocus=false){menu.hidden=true;if(restoreFocus)opener?.focus({preventScroll:true});selected=null;}
   async function copy(text){
@@ -31,9 +32,9 @@ export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPre
     const target=event.target.closest('[data-project-path],summary');if(!target || !tree.contains(target))return;
     const path=target.dataset.projectPath ?? target.parentElement.dataset.projectFolder;if(path===undefined)return;
     event.preventDefault();opener=target;const base=root()?.replace(/[\\/]+$/,'');
-    selected={relative:path,absolute:base?`${base}/${path}`:null};
+    selected={folder:target.dataset.projectPath===undefined?path:path.split('/').slice(0,-1).join('/'),relative:path,absolute:base?`${base}/${path}`:null};
     buttons[0].disabled=!selected.absolute;
-    for(const button of buttons)if(button.dataset.action==='rename')button.disabled=!selected.absolute;
+    for(const button of buttons)if(['rename','new-folder','new-file','delete'].includes(button.dataset.action))button.disabled=!selected.absolute;
     for(const button of buttons)if(button.dataset.action==='reveal'){button.hidden=!onReveal;button.disabled=!selected.absolute;}
     for(const button of buttons)if(button.dataset.split){button.hidden=!onSplit || !target.dataset.projectPath;button.disabled=!selected.absolute;}
     for(const button of buttons)if(button.dataset.action==='web-preview')button.hidden=!onWebPreview || !target.dataset.projectPath || !/\.html?$/i.test(path);
@@ -46,6 +47,7 @@ export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPre
     buttons.find(button=>!button.disabled && !button.hidden)?.focus({preventScroll:true});
   });
   for(const button of buttons)button.addEventListener('click',async()=>{
+    if(['new-folder','new-file','delete'].includes(button.dataset.action)){const selection=selected,action=button.dataset.action;close(true);try{if(selection){if(action==='delete')await onDelete(selection.relative);else await onCreate(action==='new-folder'?'directory':'file',selection.folder);}}catch(error){onError(error);}return;}
     if(button.dataset.action==='rename'){const target=opener;close();startRename(target);return;}
     if(button.dataset.action==='reveal'){const path=selected?.relative;close(true);try{if(path!==undefined)await onReveal(path);}catch(error){onError(error);}return;}
     if(button.dataset.split){const path=selected?.relative,edge=button.dataset.split;close(true);try{if(path)await onSplit(path,edge);}catch(error){onError(error);}return;}

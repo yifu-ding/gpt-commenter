@@ -1,3 +1,7 @@
+import {mergeNotes,mergeProjectState} from './project-state.js';
+import {createTreeToolbar} from './tree-toolbar.js';
+import {createEntryDialog} from './create-entry-dialog.js';
+import {applyThemeColor,syncRecentHistory,recentRootsKey} from './viewer-settings.js';
 import {applyHostAccent} from './host-accent.js';
 import {createTreePreferences,appendGitBadge} from './tree-preferences.js';
 import {fitBreadcrumb} from './breadcrumb-layout.js';
@@ -9,7 +13,7 @@ import {htmlPreviewDocument} from './html-preview.js';
 import {resolveObsidianPath,embeddedSection} from './obsidian-links.js';
 import {renamePaths} from './rename-paths.js';
 import {createFileMenu} from './file-menu.js';
-import {createPdfViewer,PDF_MIN_ZOOM,PDF_MAX_ZOOM} from './pdf-viewer.js';
+import {clippedPdfWord,createPdfViewer,PDF_MIN_ZOOM,PDF_MAX_ZOOM} from './pdf-viewer.js';
 import {createEditHistory} from './edit-history.js';
 import {ChangeSet} from '@codemirror/state';
 import {moveAnnotations} from './annotation-edits.js';
@@ -210,7 +214,7 @@ function renderBatch(){
 async function locateReviewEntry(entry,local=false){
   if(!local && splitView?.activePane()==='secondary')return splitView.call('locateReview',entry);
   if(entry.identity!==identity)await openPaneFile(entry.root,entry.path);
-  if(entry.identity===identity){$('review-batch').classList.add('preview-dismissed');const note=items.find(n=>n.id===entry.item.id)||entry.item;open(note,note);}
+  if(entry.identity===identity){$('review-batch').classList.add('preview-dismissed');const note=items.find(n=>n.id===entry.item.id)||entry.item;open(note,note);if(pdfDocument && note.pdf){selectionAnchor=pdfViewer.goToNote(note);positionComposer();}}
 }
 function pruneReviewNotes(ids){
   for(const id of ids){const entry=batchEntries.get(id);if(entry?.identity)dirtyIdentities.add(entry.identity);removedNoteIds.add(id);batchEntries.delete(id);}
@@ -264,6 +268,7 @@ $('review-send').addEventListener('click',()=>sendQueuedReview());
 $('review-send-new').addEventListener('click',()=>sendQueuedReview('new'));
 renderBatch();
 const recoveryKey=()=>`markatlas:unsaved:${identity}`;
+function readLocalDraft(key,fallback=null){try{return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback;}catch{return fallback;}}
 let saveConflict=false,conflictBase=null;
 function persist() {
   if(filePreview && filePreview.kind!=='word')return true;
@@ -342,7 +347,7 @@ function markdownOptions(currentPath){
 let htmlFrameState=null;
 function isHtmlPreview(){return /\.html?$/i.test(fileName) && mode==='rendered' && codeMode!=='edit' && !filePreview;}
 function frameNotes(){
-  htmlFrameState?.frame.contentWindow?.postMessage({markatlas:htmlFrameState.channel,type:'notes',notes:items.map(n=>({id:n.id,startOffset:n.startOffset,endOffset:n.endOffset,selectedText:n.selectedText,html:n.html?{...n.html,screenshot:undefined}:undefined})),active:editingId,enabled:commenting},'*');
+  htmlFrameState?.frame.contentWindow?.postMessage({markatlas:htmlFrameState.channel,type:'notes',notes:items.map(n=>({id:n.id,startOffset:n.startOffset,endOffset:n.endOffset,selectedText:n.selectedText,html:n.html?{...n.html,screenshot:undefined}:undefined})),active:editingId,pending:!!pending && !editingId,accent:getComputedStyle(document.documentElement).getPropertyValue('--markatlas-accent').trim(),enabled:commenting},'*');
 }
 function renderHtmlPreview(){
   if(htmlFrameState?.source===source && htmlFrameState.identity===identity && htmlFrameState.frame.isConnected){frameNotes();return;}
@@ -385,7 +390,7 @@ window.addEventListener('message',event=>{
 function render() {
   renderNavigation();updateLayout();
   const active=items.filter(item=>item.anchorStatus!=='deleted' && (item.pdf?.region || item.endOffset>item.startOffset));
-  const visible = pending ? [...active,{...pending,id:'pending-selection',temporary:true}] : active;
+  const visible = pending && !editingId ? [...active,{...pending,id:'pending-selection',temporary:true}] : active;
   updateEditorControls();
   if(isHtmlPreview()){renderHtmlPreview();return;}
   htmlFrameState=null;
@@ -479,7 +484,7 @@ function close(renderDocument=false) {
   stopReply();
   $('composer').hidden = true; pending = null; editingId = null;updateActiveNoteHighlight();
   // Repaint only persisted HTML notes; discard the temporary selected range.
-  frameNotes();
+  frameNotes();codeEditor.setNotes(items);if(filePreview?.kind==='word')wordViewer.show(filePreview,items);
   selectionAnchor = null;document.body.classList.remove('composing');if(renderDocument)render();
   queueMicrotask(()=>fileRefresh.check());
 }
@@ -529,6 +534,8 @@ function open(selection,item = null,anchor = null) {
   setDetail(null); setKind(item?.kind || 'comment',false);
   $('composer').hidden = false;document.body.classList.add('composing');
   hideSelectionAction();
+  codeEditor.setNotes([...items,...(!item?[{...pending,temporary:true}]:[])]);
+  if(filePreview?.kind==='word')wordViewer.show(filePreview,[...items,...(!item?[{...pending,temporary:true}]:[])]);
   const keepSelection=codeMode==='edit' && !item && !pdfDocument;
   updateActiveNoteHighlight();
   if(item){for(const row of $('review-list').querySelectorAll('.review-row'))row.classList.toggle('active',row.dataset.noteId===item.id);if(document.body.classList.contains('comments-open'))$('review-list').querySelector('.active')?.scrollIntoView?.({block:'nearest'});}
@@ -559,14 +566,17 @@ async function displayFileContent(name,text,fileIdentity = name,keepWatch = fals
   documentHash = [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2,'0')).join('');
   if(!preview || preview.kind==='word')try {
     const saved=projectDrafts[fileIdentity];
-    const recovery=!keepWatch && (JSON.parse(localStorage.getItem(recoveryKey()) || 'null') || (saved?.text!==saved?.base?saved:null));
-    const working=recovery || (!keepWatch && JSON.parse(localStorage.getItem(workingKey()) || 'null'));
+    const recovery=!keepWatch && (readLocalDraft(recoveryKey()) || (saved?.text!==saved?.base?saved:null));
+    const working=recovery || (!keepWatch && readLocalDraft(workingKey()));
     if(recovery && recovery.base!==diskSource && recovery.text!==diskSource){saveConflict=true;conflictBase=recovery.base;}
     if(working && typeof working.text==='string' && Array.isArray(working.items)){
       const restoredHash=await hashText(working.text);if(current!==revision)return false;source=working.text;documentHash=restoredHash;items=working.items;
     } else if(keepWatch)items=moveAnnotations(previousItems,previousText,source);
-    else items=saved?.items ? moveAnnotations(saved.items,saved.text,source) : JSON.parse(localStorage.getItem(storageKey()) || '[]');
+    else items=saved?.items ? moveAnnotations(saved.items,saved.text,source) : readLocalDraft(storageKey(),[]);
     if(!Array.isArray(items))items=[];
+    if(saved?.items)items=mergeNotes(items,moveAnnotations(saved.items,saved.text,source),[...removedNoteIds]);
+    const queued=[...batchEntries.values()].filter(entry=>entry.identity===identity && entry.item.documentHash===documentHash).map(entry=>entry.item);
+    items=mergeNotes(items,queued,[...removedNoteIds]);
     items=items.filter(x=>!removedNoteIds.has(x.id) && !x.batchSentVersion && typeof x.id==='string' && ['comment','explanation'].includes(x.kind) && Number.isInteger(x.startOffset) && Number.isInteger(x.endOffset) && x.startOffset>=0 && (x.pdf?.region || x.endOffset<=source.length) && x.startOffset<=x.endOffset);
     items=items.map(item=>({...item,documentHash}));
   } catch {items=[];}
@@ -728,10 +738,10 @@ async function submitNote() {
   if(previous)items = items.map(x=>x.id === previous.id ? item : x);else items.push(item);
   if(kind==='explanation'){delete item.explanationRequestId;delete item.explanationAnswer;delete item.explanationError;item.explanationStatus='starting';}
   const saved = persist();const current = revision;
-  if(kind==='explanation'){render();open(item,item,selectionAnchor);}else close(true);
+  if(kind==='explanation'){render();open(item,item,selectionAnchor);}else{codeEditor.clearSelection();if(filePreview?.kind==='word')wordViewer.clearSelection();if($('document').contains(window.getSelection()?.anchorNode))window.getSelection().removeAllRanges();close(true);}
   updateStatus(saved ? (kind === 'explanation' ? 'Generating explanation…' : 'Comment queued for review.') : 'Saved for this session only.');
   try {
-    try{await syncAnnotations(item.id);item.liveReference=true;if(current===revision)persist();}catch{}
+    try{await syncAnnotations(item.id);item.liveReference=true;if(current===revision)persist();await flushProjectState();}catch(error){updateStatus(`Comment kept locally; disk save failed: ${error.message}`);}
     if(item.kind === 'comment') {
       if(current===revision)updateStatus('Comment queued for review.');
     } else {
@@ -885,7 +895,7 @@ async function displayPdf(data,refresh=false){
   pdfDocument=data;linkedPdf=data.main?{root:data.root,path:data.path,main:data.main}:null;sourcePath=data.sourcePath;activeProjectPath=data.path;currentEtag=data.etag;codeFile=false;fileRefresh.stop();
   if(!refresh)pdfViewer.destroy();
   // Recompute page geometry from tracked text offsets; never keep coordinates from an old build.
-  items=items.map(item=>{const page=data.pages.find(p=>item.startOffset>=p.startOffset && item.startOffset<p.endOffset);if(item.pdf?.region)return {...item,anchorStatus:item.pdf.fingerprint===data.fingerprint?item.anchorStatus:'edited'};if(!item.pdf || !page)return item;const words=page.words.filter(w=>w.endOffset>item.startOffset&&w.startOffset<item.endOffset);return {...item,pdf:{...item.pdf,path:data.path,fingerprint:data.fingerprint,page:page.number,x:words[0]?.x || 0,y:words[0]?.y || 0,rects:words.map(w=>({x:w.x,y:w.y,width:w.width,height:w.height})),source:undefined}};});
+  items=items.map(item=>{const page=data.pages.find(p=>item.startOffset>=p.startOffset && item.startOffset<p.endOffset);if(item.pdf?.region)return {...item,anchorStatus:item.pdf.fingerprint===data.fingerprint?item.anchorStatus:'edited'};if(!item.pdf || !page)return item;const words=page.words.filter(w=>w.endOffset>item.startOffset&&w.startOffset<item.endOffset);return {...item,pdf:{...item.pdf,path:data.path,fingerprint:data.fingerprint,page:page.number,x:words[0]?.x || 0,y:words[0]?.y || 0,rects:words.map(w=>clippedPdfWord(w,item.startOffset,item.endOffset)).filter(Boolean),source:undefined}};});
   persist();syncAnnotations().catch(()=>{});render();renderBreadcrumb();renderProjectTree();$('project-status').hidden=true;
   scrollViewport({top:scroll});
   schedulePdfPoll();
@@ -956,6 +966,7 @@ window.addEventListener('pointermove',event=>{if(commentsDrag && event.pointerId
 function finishCommentsDrag(event){if(!commentsDrag || event.pointerId!==commentsDrag.id)return;commentsDrag=null;document.body.classList.remove('resizing-comments');saveCommentsWidth();}
 window.addEventListener('pointerup',finishCommentsDrag);window.addEventListener('pointercancel',finishCommentsDrag);
 commentsHandle.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const {min,max}=commentsWidthBounds();resizeComments(event.key==='Home'?min:event.key==='End'?max:commentsWidth()+(event.key==='ArrowLeft'?16:-16));saveCommentsWidth();});
+let viewerPreferences={themeColor:'host',showGitChanges:true},lastSettings=null,settingsRequest=null;
 let treeSide=localStorage.getItem('markatlas:tree-side')==='right'?'right':'left';
 let outlineSide=localStorage.getItem('markatlas:outline-side')==='right'?'right':'left';
 let preferredOutlineWidth=Number(localStorage.getItem('markatlas:outline-width'))||200,outlineDrag=null;
@@ -1078,7 +1089,7 @@ const nativeNavigation=createNativeNavigation({getProject:()=>project,readFile:(
 const toolbarActions=document.createElement('div');toolbarActions.className='toolbar-actions';toolbarActions.setAttribute('role','group');toolbarActions.setAttribute('aria-label','File actions');$('document-nav-toggle').before(toolbarActions);for(const id of ['document-nav-toggle','project-search-toggle','comments-toggle','width-mode','mode-cycle','view-toggle','code-edit','comment','pdf-screenshot'])toolbarActions.append($(id));
 if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>fitBreadcrumb(document.querySelector('.breadcrumb'))).observe(document.querySelector('.breadcrumb-space'));document.fonts?.ready.then(()=>fitBreadcrumb(document.querySelector('.breadcrumb')));
 const fileMenu=createFileMenu({tree:$('project-tree'),menu:$('file-context-menu'),root:()=>project?.rootPath,
-  onRename:renameTreeEntry,
+  onRename:renameTreeEntry,onCreate:(kind,folder)=>newTreeEntry(kind,folder),onDelete:deleteTreeEntry,
   onReveal:path=>serverData('reveal_review_project_file',{root:project.rootPath,path}),
   onSplit:splitView?((path,edge)=>splitView.open(project.rootPath,path,edge)):null,
   onWebPreview:async path=>{await openProjectFile(path);mode='rendered';codeMode='review';render();},
@@ -1103,20 +1114,20 @@ function renderProjectTree() {
     for(const node of treePreferences.sort(nodes)) {
       const row=document.createElement('li');list.append(row);
       if(node.type==='directory') {
-        const folder=document.createElement('details'),title=document.createElement('summary');folder.dataset.projectFolder=node.path;folder.open=expanded.has(node.path) || (treeAutoExpand && (node.path===breadcrumbFolder || !!breadcrumbFolder?.startsWith(`${node.path}/`) || !!activeProjectPath?.startsWith(`${node.path}/`)));title.textContent=node.name;appendGitBadge(title,node.git);if(node.path===breadcrumbFolder)title.dataset.breadcrumbActive='true';folder.append(title);row.append(folder);children(node.children,folder);
+        const folder=document.createElement('details'),title=document.createElement('summary');folder.dataset.projectFolder=node.path;folder.open=expanded.has(node.path) || (treeAutoExpand && (node.path===breadcrumbFolder || !!breadcrumbFolder?.startsWith(`${node.path}/`) || !!activeProjectPath?.startsWith(`${node.path}/`)));const label=document.createElement('span');label.className='file-label';label.textContent=node.name;title.append(label);if(viewerPreferences.showGitChanges)appendGitBadge(title,node.git);if(node.path===breadcrumbFolder)title.dataset.breadcrumbActive='true';folder.append(title);row.append(folder);children(node.children,folder);
       } else {
         const button=document.createElement('button');button.type='button';button.dataset.projectPath=node.path;button.setAttribute('aria-disabled',String(!node.supported));
         button.draggable=!!project.rootPath && !project.singleFile;
         button.title=node.deleted ? `${node.path} · Deleted file` : node.supported ? node.path : `${node.path} · Unsupported file type`;
         if(node.path===activeProjectPath)button.setAttribute('aria-current','page');
         const symbol=document.createElement('span');symbol.className='file-symbol';symbol.dataset.kind=isImage(node.name)?'image':isMarkdown(node.name)?'markdown':/\.svg$/i.test(node.name)?'vector':'code';symbol.setAttribute('aria-hidden','true');symbol.textContent=isImage(node.name)?'▧':isMarkdown(node.name)?'M↓':/\.svg$/i.test(node.name)?'▣':'#';
-        const name=document.createElement('span');name.className='file-label';name.textContent=node.name;button.append(symbol,name);appendGitBadge(button,node.git);row.append(button);
+        const name=document.createElement('span');name.className='file-label';name.textContent=node.name;button.append(symbol,name);if(viewerPreferences.showGitChanges)appendGitBadge(button,node.git);row.append(button);
       }
     }
   }
   const query=$('project-filter').value.trim().toLowerCase();
   function filtered(nodes){return nodes.flatMap(node=>{if(!showHiddenFiles && node.name.startsWith('.'))return [];if(node.type==='directory'){const children=filtered(node.children);return !query || children.length ? [{...node,children}] : [];}return node.path.toLowerCase().includes(query) ? [node] : [];});}
-  const summary=$('git-summary');summary.replaceChildren();summary.hidden=!project.git;if(project.git){summary.append('Git changes');appendGitBadge(summary,project.root.git || {added:0,removed:0});}
+  const summary=$('git-summary');summary.replaceChildren();summary.hidden=!project.git || !viewerPreferences.showGitChanges;if(project.git && viewerPreferences.showGitChanges){summary.append('Git changes');appendGitBadge(summary,project.root.git || {added:0,removed:0});}
   children(filtered(project.root.children),container);
   if(query && treeAutoExpand)container.querySelectorAll('details').forEach(node=>node.open=true);
 }
@@ -1137,6 +1148,31 @@ const locateTree=treeTool('tree-locate-file','Locate current file','M12 2v4m0 12
  button.scrollIntoView({block:'center',inline:'nearest'});button.focus({preventScroll:true});
 });
 
+let selectedCreationFolder=null;
+const entryDialog=createEntryDialog(async({root,folder,name,kind})=>{
+ const created=await serverData('create_review_project_entry',{root,folder,name,kind});
+ if(project?.rootPath!==root)return;
+ $('project-filter').value='';if(name.startsWith('.')){showHiddenFiles=true;updateHiddenFilesToggle();}
+ breadcrumbFolder=kind==='directory'?created.path:folder;treeAutoExpand=true;
+ try{await loadWorkspace();
+ if(kind==='file' && !/\.(pdf|png|apng|jpe?g|gif|webp|bmp|ico|avif|docx|xlsx|pptx|zip|bin)$/i.test(name))await openProjectFile(created.path);
+ }catch(error){showPdfError(new Error('Created successfully, but could not open it: '+error.message));}
+});
+const newFolder=treeTool('new-folder','New folder','M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v8m-4-4h8');
+treeToolButtons.insertBefore(newFolder,$('open-folder'));newFolder.addEventListener('click',()=>newTreeEntry('directory'));
+async function newTreeEntry(kind,targetFolder){
+ if(!project?.rootPath || project.singleFile)await openFolderDialog();
+ if(!project?.rootPath || project.singleFile)return;
+ const folder=targetFolder ?? selectedCreationFolder ?? breadcrumbFolder ?? (activeProjectPath?.includes('/')?activeProjectPath.slice(0,activeProjectPath.lastIndexOf('/')):'');
+ entryDialog.open({root:project.rootPath,folder,kind});
+}
+$('project-tree').addEventListener('click',event=>{
+ if(event.target.closest('input'))return;
+ const folder=event.target.closest('summary')?.parentElement;
+ if(folder){selectedCreationFolder=folder.dataset.projectFolder;return;}
+ const file=event.target.closest('[data-project-path]');if(file){const path=file.dataset.projectPath;selectedCreationFolder=path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';}
+});
+$('project-toggle').addEventListener('click',()=>{selectedCreationFolder='';});
 let treeOpenTimer;
 $('project-tree').addEventListener('click',event=>{if(event.target.closest('input'))return;const button=event.target.closest('[data-project-path]');if(!button)return;clearTimeout(treeOpenTimer);if(event.detail===0){if(button.getAttribute('aria-disabled')!=='true')openProjectFile(button.dataset.projectPath);return;}if(event.detail<2)treeOpenTimer=setTimeout(()=>{if(button.getAttribute('aria-disabled')!=='true')openProjectFile(button.dataset.projectPath);},500);});
 $('project-tree').addEventListener('dblclick',()=>clearTimeout(treeOpenTimer),true);
@@ -1168,7 +1204,7 @@ async function applyTreeRename({root,from,to}){
     if(next!==key){try{localStorage.setItem(next,JSON.stringify(map.rewrite(JSON.parse(localStorage.getItem(key)))));localStorage.removeItem(key);}catch{}}
   }
   const changed=map.path(activeProjectPath)!==activeProjectPath;
-  activeProjectPath=map.path(activeProjectPath);fileName=map.path(fileName);sourcePath=map.absolute(sourcePath);identity=map.identity(identity);breadcrumbFolder=map.path(breadcrumbFolder);
+  activeProjectPath=map.path(activeProjectPath);fileName=map.path(fileName);sourcePath=map.absolute(sourcePath);identity=map.identity(identity);breadcrumbFolder=map.path(breadcrumbFolder);selectedCreationFolder=map.path(selectedCreationFolder);
   items=map.rewrite(items);linkedPdf=map.rewrite(linkedPdf);
   if(changed){fileRefresh.stop();clearTimeout(pdfPoll);pdfDocument=map.rewrite(pdfDocument);currentEtag=null;}
   project=await serverData('list_markdown_project',{folderPath:root});
@@ -1177,6 +1213,28 @@ async function applyTreeRename({root,from,to}){
   if(paneBridge)await paneBridge.call('location',{root,path:activeProjectPath});
 }
 if(paneBridge)paneBridge.handle('renamed',applyTreeRename);
+async function applyTreeDeletion({root,path}){
+ if(project?.rootPath!==root)return;
+ const affected=value=>value===path || value?.startsWith(path+'/');
+ if(affected(activeProjectPath))clearWorkspaceDocument();
+ fileHistory=fileHistory.filter(entry=>entry.root!==root || !affected(entry.path));historyIndex=Math.min(historyIndex,fileHistory.length-1);updateFileHistory();
+ if(affected(selectedCreationFolder))selectedCreationFolder=null;
+ if(affected(breadcrumbFolder))breadcrumbFolder=null;
+ await loadWorkspace();
+}
+if(paneBridge)paneBridge.handle('deleted',applyTreeDeletion);
+async function deleteTreeEntry(path){
+ if(movingProjectFile)throw Error('Please wait for the current file operation.');
+ if(!project?.rootPath || project.singleFile)throw Error('Open a project folder before deleting.');
+ if(!window.confirm(`Move "${path}" to Trash?`))return;
+ movingProjectFile=true;const root=project.rootPath;
+ try{
+  await flushPane();if(splitView?.isOpen())await splitView.call('flush');
+  await serverData('delete_review_project_entry',{root,path});
+  await applyTreeDeletion({root,path});
+  if(splitView?.isOpen())await splitView.call('deleted',{root,path});
+ }finally{movingProjectFile=false;}
+}
 async function renameTreeEntry(path,name){
   if(movingProjectFile)throw Error('Please wait for the current file operation.');
   if(!project?.rootPath || project.singleFile)throw Error('Open a project folder before renaming.');
@@ -1254,6 +1312,13 @@ async function openProjectFile(path,sourceLine){
   }
   beginFileChange();const current=++incomingRevision;$('project-status').textContent=`Opening ${path}…`;
   try {
+    if(selectedProject.rootPath && !selectedProject.singleFile && path.includes('/')){
+      await flushProjectState();
+      const saved=await serverData('review_project_state',{root:selectedProject.rootPath,path});
+      if(current!==incomingRevision || selectedProject!==project)return;
+      const merged=mergeProjectState({entries:[...batchEntries],drafts:projectDrafts,removedIds:[...removedNoteIds]},{...saved,changedIdentities:[...new Set([...Object.keys(saved.drafts || {}),...(saved.entries || []).map(([,entry])=>entry.identity)])]});
+      projectDrafts=merged.drafts;batchEntries=new Map(merged.entries);removedNoteIds=new Set(merged.removedIds);renderBatch();
+    }
     if(isPdf(path)){
       if(!selectedProject.rootPath)throw Error('Open the folder containing this PDF to review it.');
       const result=await serverData('read_latex_pdf',{root:selectedProject.rootPath,path});
@@ -1290,7 +1355,6 @@ async function serverData(name,args={}) {
   if(!result.structuredContent)throw Error('Project data is unavailable.');
   return result.structuredContent;
 }
-const recentRootsKey='markatlas:recent-projects:v1';
 let recentRoots=[];try{recentRoots=JSON.parse(localStorage.getItem(recentRootsKey)||'[]').filter(root=>typeof root==='string').slice(0,10);}catch{}
 function renderRecentRoots(){const node=$('recent-projects');node.replaceChildren();node.hidden=!!project || !!fileName || !recentRoots.length;if(node.hidden)return;const heading=document.createElement('p');heading.textContent='Recently opened';node.append(heading);for(const root of recentRoots){const button=document.createElement('button');button.textContent=root.split('/').filter(Boolean).at(-1)||root;button.title=root;button.setAttribute('aria-label',`Open recent project ${button.textContent}`);button.addEventListener('click',async()=>{try{if(!await canLeaveFile())return;const tree=await serverData('list_markdown_project',{folderPath:root});if(await acceptWorkspace(tree,{selectDefault:true}))connectedFolder=tree.rootPath;}catch(error){$('project-status').hidden=false;$('project-status').textContent=error.message;}});node.append(button);}}
 function rememberRoot(root){if(!root)return;recentRoots=[root,...recentRoots.filter(value=>value!==root)].slice(0,10);try{localStorage.setItem(recentRootsKey,JSON.stringify(recentRoots));}catch{}renderRecentRoots();}
@@ -1305,10 +1369,10 @@ async function acceptWorkspace(tree,{selectDefault=false,allowDefault=true}={}) 
   const initial=!project;
   const changed=project && (project.rootPath!==tree.rootPath || !!project.singleFile!==!!tree.singleFile || (tree.singleFile && project.singlePath!==tree.singlePath));
   if(changed && !(await canLeaveFile()))return false;
-  if(changed){treeAutoExpand=true;await flushProjectState();dirtyIdentities.clear();projectDrafts={};linkedPdf=null;currentEtag=null;clearWorkspaceDocument();breadcrumbFolder=null;$('project-filter').value='';$('project-tree').replaceChildren();}
+  if(changed){selectedCreationFolder=null;treeAutoExpand=true;await flushProjectState();dirtyIdentities.clear();projectDrafts={};linkedPdf=null;currentEtag=null;clearWorkspaceDocument();breadcrumbFolder=null;$('project-filter').value='';$('project-tree').replaceChildren();}
   if(project && !changed)Object.assign(project,tree);else project=tree;
-  if((initial || changed) && !tree.singleFile){try{const saved=await serverData('review_project_state',{root:tree.rootPath});projectDrafts=saved.drafts || {};for(const [key,draft] of Object.entries(projectDrafts)){const prefix='project:'+tree.rootPath.replace(/\/+$/,'')+'/';if(!key.startsWith(prefix))continue;for(const item of draft.items || [])if(item.kind==='explanation' && !removedNoteIds.has(item.id))batchEntries.set(item.id,{identity:key,root:tree.rootPath,path:key.slice(prefix.length),item});}for(const [id,entry] of saved.entries || [])if(entryRoot(entry)===normalizedRoot(tree.rootPath))batchEntries.set(id,entry);}catch(error){updateStatus(`Cannot load project notes: ${error.message}`);}}
-  if(!tree.singleFile)rememberRoot(tree.rootPath);
+  if((initial || changed) && !tree.singleFile){try{const saved=await serverData('review_project_state',{root:tree.rootPath});for(const id of saved.removedIds || []){removedNoteIds.add(id);batchEntries.delete(id);}projectDrafts=saved.drafts || {};for(const [key,draft] of Object.entries(projectDrafts)){const prefix='project:'+tree.rootPath.replace(/\/+$/,'')+'/';if(!key.startsWith(prefix))continue;for(const item of draft.items || [])if(item.kind==='explanation' && !removedNoteIds.has(item.id))batchEntries.set(item.id,{identity:key,root:tree.rootPath,path:key.slice(prefix.length),item});}for(const [id,entry] of saved.entries || [])if(entryRoot(entry)===normalizedRoot(tree.rootPath))batchEntries.set(id,entry);}catch(error){updateStatus(`Cannot load project notes: ${error.message}`);}}
+  if(!tree.singleFile && (initial || changed || selectDefault))rememberRoot(tree.rootPath);
   $('project-status').hidden=true;$('project-status').textContent='';
   renderBreadcrumb();renderProjectTree();renderBatch();
   // Only choose a default when connecting a folder, never on focus/tree refresh.
@@ -1349,7 +1413,7 @@ async function openFileDialog(){
   finally{choosingFile=false;}
 }
 $('open-file-action').addEventListener('click',openFileDialog);
-$('open-single-file').addEventListener('click',openFileDialog);
+$('open-single-file').addEventListener('click',()=>newTreeEntry('file'));
 $('open-folder-action').addEventListener('click',()=>{setOpenMenu(false);openFolderDialog();});
 document.addEventListener('click',e=>{if(!e.target.closest?.('.open-control') && !e.target.closest?.('#project-toggle'))setOpenMenu(false);});
 $('open-menu').addEventListener('keydown',e=>{
@@ -1390,15 +1454,38 @@ function watchResource(uri,text) {
 window.addEventListener('focus',()=>{loadWorkspace();fileRefresh.check();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){loadWorkspace();fileRefresh.check();}});
 window.addEventListener('pagehide',()=>{clearTimeout(pdfPoll);persist();saveCode();if(syncTimer!==null){clearTimeout(syncTimer);syncTimer=null;syncAnnotations().catch(()=>{});}fileRefresh.stop();});
+let lastAccentContext=null;
 function applyHostContext(context) {
-  applyHostAccent(context);
+  if(context?.styles?.variables)lastAccentContext=context;
+  document.documentElement.style.removeProperty('--markatlas-accent');document.documentElement.style.removeProperty('--markatlas-accent-soft');
+  applyHostAccent(lastAccentContext || context);
+  applyThemeColor(viewerPreferences.themeColor,context);
   $('inline-mode').textContent=context?.displayMode==='inline'?'Expand view':'Inline view';
   if(['light','dark'].includes(context?.theme)){document.documentElement.dataset.theme=context.theme;document.querySelectorAll('.markdown-rendered').forEach(el=>{el.classList.toggle('theme-dark',context.theme==='dark');el.classList.toggle('theme-light',context.theme==='light');});}
 
 }
+async function refreshViewerSettings(){
+ if(settingsRequest)return settingsRequest;
+ settingsRequest=(async()=>{try{
+  const result=await serverData('markatlas_settings_read');if(!result?.values)return;
+  const values=result.preferences || result.values;
+  if(['left','right'].includes(values.treePosition) && (!lastSettings || values.treePosition!==lastSettings.treePosition))treeSide=values.treePosition;
+  if(['left','right'].includes(values.outlinePosition) && (!lastSettings || values.outlinePosition!==lastSettings.outlinePosition))outlineSide=values.outlinePosition;
+  viewerPreferences={themeColor:values.themeColor || 'host',showGitChanges:values.showGitChanges!==false};
+  const changed=JSON.stringify(lastSettings)!==JSON.stringify(values);lastSettings={...values};
+  if(syncRecentHistory(localStorage,result.recentHistoryRevision)){recentRoots=[];renderRecentRoots();}
+  if(changed){applyHostContext(app.getHostContext());renderProjectTree();updateLayout();codeEditor.measure();positionComposer();}
+ }catch(error){console.warn('MarkAtlas settings unavailable:',error.message);}finally{settingsRequest=null;}})();return settingsRequest;
+}
+window.addEventListener('focus',()=>{refreshViewerSettings();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshViewerSettings();});
+window.addEventListener('storage',event=>{if(event.key===recentRootsKey){try{recentRoots=JSON.parse(event.newValue||'[]');renderRecentRoots();}catch{}}});
+const settingsPoll=setInterval(()=>{if(!document.hidden)refreshViewerSettings();},3000);
+window.addEventListener('pagehide',()=>clearInterval(settingsPoll));
 app.onhostcontextchanged = context=>{applyHostContext(context);loadWorkspace();};
+createTreeToolbar(treeToolButtons);
 setProjectOpen(true);
-app.connect().then(async()=>{applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
+app.connect().then(async()=>{await refreshViewerSettings();applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
 
 // Capture before editor and host bubbling shortcuts. Each pane handles its own focus.
 window.addEventListener('keydown',event=>{
