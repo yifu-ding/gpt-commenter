@@ -1,3 +1,4 @@
+import {gunzipSync} from 'node:zlib';
 import {pdfNavigation} from './pdf-navigation.js';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -140,5 +141,19 @@ export function latexService(workspace){
     const raw=found.raw ?? await readFile(await workspace.resolve(root,found.path),'utf8');
     return {status:'located',main:relative(root,main),path:found.path,sourcePath:join(root,found.path),line:found.line,endLine:found.endLine || found.line,method:found.method,sourceHash:hash(raw),context:raw.split('\n').slice(Math.max(0,found.line-4),found.line+5).join('\n').slice(0,4000)};
   }
-  return {read,page,locate};
+  async function sources(root,path){const pdf=await read(root,path);return latexSourceFiles(workspace,root,path,pdf.main);}
+  return {read,page,locate,sources};
 }
+
+export async function latexSourceFiles(workspace,root,path,mainPath){
+    if(!mainPath)return [];
+    const result=new Set([mainPath]),target=await workspace.resolve(root,path),main=await workspace.resolve(root,mainPath);
+    for(const suffix of ['.synctex.gz','.synctex']){
+      let raw;try{const file=await workspace.resolve(root,relative(root,target.replace(/\.pdf$/i,suffix))),bytes=await readFile(file);raw=suffix.endsWith('.gz')?gunzipSync(bytes,{maxOutputLength:32*1024*1024}).toString('utf8'):bytes.toString('utf8');}catch(error){if(error.code==='ENOENT')continue;throw error;}
+      for(const match of raw.matchAll(/^Input:\d+:(.+)$/gm)){
+        for(const base of [dirname(main),dirname(target),root])try{const source=await workspace.resolve(root,relative(root,resolve(base,match[1].trim())));if(/\.(tex|sty|cls|bib|ltx)$/i.test(source))result.add(relative(root,source));break;}catch{}
+      }
+      break;
+    }
+    return [...result];
+  }

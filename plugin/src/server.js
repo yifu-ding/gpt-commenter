@@ -1,3 +1,4 @@
+import {patchStore} from './patch-store.js';
 import {trashProjectEntry} from './trash.js';
 import {revealInFinder} from './finder.js';
 import {launchPreviewBrowser} from './browser-launch.js';
@@ -94,6 +95,14 @@ registerAppTool(server,'list_markdown_project',{
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
 },async({folderPath})=>({content:[],structuredContent:await workspace.list(folderPath)}));
 const latex=latexService(workspace);
+const patches=patchStore(workspace,latex);
+const patchLocation={root:z.string(),path:z.string()},patchIdentity={...patchLocation,id:z.string()};
+server.registerTool('create_review_patch',{description:'Propose changes without modifying source. Read the source first, supply its exact baseText and full proposedText. Store the original user comments and context. Creates a reviewable patch in the source folder .markatlas/patches cache, even when the project is not open in the file tree.',inputSchema:{...patchLocation,baseText:z.string(),proposedText:z.string(),title:z.string().optional(),context:z.string().optional()}},async args=>({content:[{type:'text',text:JSON.stringify(await patches.create(args))}]}));
+server.registerTool('read_review_patch',{description:'Read a saved patch, its exact source baseline, proposed text, diff, revision and user comments.',inputSchema:patchIdentity},async({root,path,id})=>{const record=await patches.read(root,path,id);return {content:[{type:'text',text:JSON.stringify(record)}],structuredContent:record};});
+server.registerTool('update_review_patch',{description:'Revise a pending patch without changing source. Preserve its baseText. Include the expected revision; never apply a patch as part of a preview request.',inputSchema:{...patchIdentity,expectedRevision:z.number().int(),proposedText:z.string().optional(),comment:z.object({message:z.string(),quote:z.string().optional()}).optional()}},async args=>{const record=await patches.update(args);return {content:[{type:'text',text:JSON.stringify(record)}],structuredContent:record};});
+registerAppTool(server,'list_review_patches',{description:'List pending patches for a file or PDF source inputs.',inputSchema:patchLocation,_meta:{ui:{visibility:['app']}}},async({root,path})=>({content:[],structuredContent:await patches.list(root,path)}));
+registerAppTool(server,'apply_review_patch',{description:'Apply the patch explicitly selected by the user, rejecting source or patch conflicts.',inputSchema:{...patchIdentity,expectedRevision:z.number().int()},_meta:{ui:{visibility:['app']}}},async args=>({content:[],structuredContent:await patches.apply(args)}));
+
 registerAppTool(server,'reveal_review_project_file',{description:'Reveal a connected file or folder in Finder.',inputSchema:{root:z.string(),path:z.string()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path})=>({content:[],structuredContent:await revealInFinder(workspace,root,path)}));
 registerAppTool(server,'resolve_native_preview_file',{description:'Resolve a connected file for the host native preview.',inputSchema:{root:z.string(),path:z.string()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path})=>({content:[],structuredContent:{path:await workspace.resolve(root,path)}}));
 registerAppTool(server,'resolve_native_office_file',{

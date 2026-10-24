@@ -63,3 +63,5 @@ const htmlContent=reviewBatchContent([{root:'/html',path:'index.html',item:htmlI
 assert.ok(htmlContent.some(c=>c.type==='image' && c.data==='YQ=='));assert.match(htmlContent.map(c=>c.text||'').join(' '),/HTML region.*visual reference/);
 const htmlPrepared=await prepareReviewBatch([{root:'/html',path:'index.html',item:htmlItem}],dependencies);assert.equal(htmlPrepared[0].item.selectedText,'Visible caption');
 assert.equal((await prepareReviewBatch([{root:'/html',path:'index.html',item:{...htmlItem,anchorStatus:'edited'}}],dependencies)).length,1);
+
+const preview=reviewBatchContent(entries,{previewChanges:true,attachments:true}).map(c=>c.text||'').join('\n');assert.match(preview,/create_review_patch/);assert.doesNotMatch(preview,/Edit the \.tex source and recompile|Apply each comment/);await sendReviewBatch({message:{async send(params){message=params;return {};}}},entries,'active','/project',{previewChanges:true});assert.match(message.content.at(-1).text,/Do not apply changes/);
