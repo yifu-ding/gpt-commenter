@@ -58,7 +58,7 @@ output+=`
 #document :is(.cm-markdown-preview) p,#document.markdown-rendered p{margin-block:.4em!important;line-height:1.65}
 #document :is(.cm-markdown-preview) :is(ul,ol),#document.markdown-rendered :is(ul,ol){margin-block:.35em!important}
 #document .cm-markdown-preview{overflow-x:auto;font-family:system-ui,sans-serif}
-#document .cm-content[aria-label="Markdown live editor"] .cm-markdown-gap{min-height:8px!important;line-height:8px!important;font-size:8px!important}
+#document .cm-content[aria-label="Markdown live editor"] .cm-markdown-gap{min-height:1.65em!important;line-height:1.65!important;font-size:inherit!important}
 #document .cm-markdown-preview table{display:table!important}
 #document .cm-markdown-table-row table{max-width:none!important;margin:0!important;border-bottom:0!important}
 #document .cm-markdown-table-row[data-row-stripe=even] tbody tr{background:var(--surface)!important}
