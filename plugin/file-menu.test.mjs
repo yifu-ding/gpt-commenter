@@ -24,4 +24,6 @@ open(folder);menu.querySelector('[data-action="new-folder"]').click();await flus
 open(file);menu.querySelector('[data-action="new-file"]').click();await flush();assert.deepEqual(created.at(-1),{kind:'file',folder:'docs'});
 assert.equal(menu.lastElementChild.dataset.action,'delete');open(folder);menu.lastElementChild.click();await flush();assert.deepEqual(deleted,['docs']);
 root=null;open();for(const action of ['new-file','new-folder','delete'])assert.equal(menu.querySelector(`[data-action="${action}"]`).disabled,true);
+root='/project';
+file.dataset.deleted='true';open();assert.equal(buttons[0].disabled,false,'deleted paths can still be copied');assert.equal(buttons[3].disabled,true,'missing files cannot open native previews');
 console.log('File/folder path menu, relative paths, keyboard dismissal, clipboard fallback, and failure checks passed');window.close();

@@ -1,4 +1,4 @@
-"""Build a development-installable macOS ZIP without npm runtime dependencies."""
+"""Build a self-contained macOS arm64 MCP plugin ZIP and verify its runtime."""
 import hashlib
 import json
 import platform
@@ -54,6 +54,7 @@ with tempfile.TemporaryDirectory(prefix='markatlas-package-') as temporary:
     (stage / 'mcp.json').write_text(json.dumps(config, indent=2) + '\n')
     (stage / 'package.json').write_text(json.dumps({
         'name': manifest['name'], 'version': version, 'private': True,
+        'os': ['darwin'], 'cpu': ['arm64'],
         'type': 'module', 'scripts': {'start': './runtime/node dist/server.js'},
     }, indent=2) + '\n')
     (stage / 'README.md').write_text(f'''# MarkAtlas {version} — macOS Apple Silicon

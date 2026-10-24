@@ -1,24 +1,27 @@
-# MarkAtlas 0.16.4
+# MarkAtlas 0.16.5
 
 Collect comments. Let AI act.
 
 ## Changes in this release
 
-- Added HTML review with relative resources and selection annotations.
-- Expanded Markdown editing with Obsidian syntax, live preview, properties,
-  keyboard shortcuts, and improved tables and lists.
-- Added split workspaces, document navigation, file search, Git tree indicators,
-  and file/folder renaming with comment migration.
-- Improved PDF navigation, native controls, theme styling, and comment handling.
-- Preserved the source installer, bilingual package instructions, and bundled
-  Node and PDF tools for macOS Apple Silicon.
+- Hide deleted Git files and directories from the file tree while preserving Git
+  change totals. Missing paths now show a useful moved/deleted message.
+- Prevent stale deleted entries from opening previews or triggering file actions.
+- Add appearance settings, file-tree controls, new-file/folder creation, and
+  moving deleted files to Trash.
+- Improve Markdown editing, PDF navigation and selection, comment persistence,
+  and clearing recently opened history.
+- Include the macOS arm64 Node runtime, bundled JavaScript dependencies,
+  Poppler PDF executables and libraries, encoding data, and native file chooser.
+- Verify the extracted package with a system-only PATH, including Python/text
+  read/save, PDF extraction/rendering, settings, and MCP discovery.
 
 ## Downloads
 
-- `markatlas-0.16.4-macos-arm64.zip`: ready-built desktop plugin package.
-- `markatlas-0.16.4-source.zip`: matching repository source, including the local
+- `markatlas-0.16.5-macos-arm64.zip`: ready-built desktop plugin package.
+- `markatlas-0.16.5-source.zip`: matching repository source, including the local
   marketplace and macOS build installer. Dependencies and build outputs are excluded.
-- `markatlas-0.16.4-SHA256SUMS.txt`: SHA-256 checksums for both archives.
+- `markatlas-0.16.5-SHA256SUMS.txt`: SHA-256 checksums for both archives.
 
 Review and edit Markdown and code, annotate PDF text or screenshot regions, and
 send comments to the current conversation with their file context. Text edits

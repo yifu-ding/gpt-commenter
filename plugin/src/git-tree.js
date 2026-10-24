@@ -27,12 +27,15 @@ export async function gitTreeChanges(root){
 export function applyGitTree(root,changes){
  if(!changes)return;
  const existing=new Map();function index(node){existing.set(node.path,node);for(const child of node.children || [])index(child);}index(root);
- for(const [path,change] of changes){let node=existing.get(path);if(!node){
-   // Removed tracked files have no filesystem entry but still belong in the change list.
-   if(!change.deleted)continue;let parent=root,prefix='';const parts=path.split('/');
-   for(const name of parts.slice(0,-1)){prefix=prefix?prefix+'/'+name:name;let folder=parent.children.find(n=>n.path===prefix);if(!folder){folder={name,path:prefix,type:'directory',children:[],modified:0};parent.children.push(folder);}parent=folder;}
-   node={name:parts.at(-1),path,type:'file',supported:false,deleted:true,modified:0};parent.children.push(node);
-  }node.git=change;
- }
+ // Git decorates the filesystem tree; it must not recreate deleted entries.
+ for(const [path,change] of changes){const node=existing.get(path);if(node)node.git=change;}
  function sum(node){if(node.type!=='directory')return node.git || {added:0,removed:0,count:0};const total={added:0,removed:0,count:0};for(const child of node.children){const value=sum(child);total.added+=value.added;total.removed+=value.removed;total.count+=value.count??1;}if(total.count)node.git=total;return total;}sum(root);
+ // Keep deletions in Git totals for surviving ancestor folders, without visible rows.
+ for(const [path,change] of changes)if(change.deleted && !existing.has(path)){
+  let parent=path;
+  while(true){parent=parent.includes('/')?parent.slice(0,parent.lastIndexOf('/')):'';const folder=existing.get(parent);
+   if(folder?.type==='directory'){folder.git??={added:0,removed:0,count:0};folder.git.added+=change.added;folder.git.removed+=change.removed;folder.git.count++;}
+   if(!parent)break;
+  }
+ }
 }

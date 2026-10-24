@@ -60,10 +60,16 @@ try {
  supplied=[];await assert.rejects(()=>access.list(),/Open folder/);
  // Explicit connections work without roots, are not selected globally, and remain bounded.
  const manual=workspaceAccess(async()=>[]);
+ await assert.rejects(()=>manual.connectFile(join(root,'missing.py')),error=>error.code==='ENOENT' && /moved or deleted.*Refresh/.test(error.message));
  await assert.rejects(()=>manual.read(root,'docs/page.md'),/no longer available/);
  await assert.rejects(()=>manual.list('relative/path'),/absolute/);
  await assert.rejects(()=>manual.list(join(root,'docs/page.md')),/folder, not a file/);
  const connected=await manual.list(root);assert.equal(connected.rootPath,root);
+ for(const name of ['pipeline.py','config.yaml','script.R','Dockerfile']){
+  await writeFile(join(root,name),'# Existing text file\n');
+  const snapshot=await manual.read(root,name);assert.equal(snapshot.kind,'text');assert.equal(snapshot.readOnly,undefined);
+  assert.equal((await manual.save(root,name,'# Updated\n',snapshot.etag)).text,'# Updated\n');
+ }
  assert.equal((await manual.read(root,'docs/page.md')).text,'# Changed by chat');
  await assert.rejects(()=>manual.read(root,'../secret.md'),/outside/);
  await assert.rejects(()=>manual.read(root,'escape.md'),/outside/);
@@ -83,7 +89,7 @@ try {
  const beforeMove=await manual.read(root,'docs/page.md');
  assert.equal((await manual.move(root,'docs/page.md','empty-target')).path,'empty-target/page.md');
  assert.equal((await manual.read(root,'empty-target/page.md')).text,beforeMove.text);
- await assert.rejects(()=>manual.read(root,'docs/page.md'),/ENOENT/);
+ await assert.rejects(()=>manual.read(root,'docs/page.md'),error=>error.code==='ENOENT' && /moved or deleted.*Refresh/.test(error.message));
  await writeFile(join(root,'docs/page.md'),'Do not replace');
  await assert.rejects(()=>manual.move(root,'empty-target/page.md','docs'),/already exists/);
  assert.equal((await manual.read(root,'docs/page.md')).text,'Do not replace');
