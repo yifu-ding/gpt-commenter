@@ -1,3 +1,4 @@
+import {trashProjectEntry} from './trash.js';
 import {revealInFinder} from './finder.js';
 import {launchPreviewBrowser} from './browser-launch.js';
 import {webPreviewService} from './web-preview.js';
@@ -132,6 +133,11 @@ registerAppTool(server,'create_review_project_entry',{
   inputSchema:{root:z.string(),folder:z.string(),name:z.string(),kind:z.enum(['file','directory'])},
   _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
 },async({root,folder,name,kind})=>({content:[],structuredContent:await workspace.create(root,folder,name,kind)}));
+registerAppTool(server,'delete_review_project_entry',{
+ description:'Move a project file or folder to the macOS Trash.',
+ inputSchema:{root:z.string(),path:z.string()},
+ _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false}
+},async({root,path})=>({content:[],structuredContent:await trashProjectEntry(workspace,root,path)}));
 registerAppTool(server,'rename_review_project_file',{
   description:'Rename a file or folder in the connected project without replacing an existing entry.',
   inputSchema:{root:z.string(),path:z.string(),name:z.string()},

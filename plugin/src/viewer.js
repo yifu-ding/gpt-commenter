@@ -1087,7 +1087,7 @@ const nativeNavigation=createNativeNavigation({getProject:()=>project,readFile:(
 const toolbarActions=document.createElement('div');toolbarActions.className='toolbar-actions';toolbarActions.setAttribute('role','group');toolbarActions.setAttribute('aria-label','File actions');$('document-nav-toggle').before(toolbarActions);for(const id of ['document-nav-toggle','project-search-toggle','comments-toggle','width-mode','mode-cycle','view-toggle','code-edit','comment','pdf-screenshot'])toolbarActions.append($(id));
 if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>fitBreadcrumb(document.querySelector('.breadcrumb'))).observe(document.querySelector('.breadcrumb-space'));document.fonts?.ready.then(()=>fitBreadcrumb(document.querySelector('.breadcrumb')));
 const fileMenu=createFileMenu({tree:$('project-tree'),menu:$('file-context-menu'),root:()=>project?.rootPath,
-  onRename:renameTreeEntry,
+  onRename:renameTreeEntry,onCreate:(kind,folder)=>newTreeEntry(kind,folder),onDelete:deleteTreeEntry,
   onReveal:path=>serverData('reveal_review_project_file',{root:project.rootPath,path}),
   onSplit:splitView?((path,edge)=>splitView.open(project.rootPath,path,edge)):null,
   onWebPreview:async path=>{await openProjectFile(path);mode='rendered';codeMode='review';render();},
@@ -1158,10 +1158,10 @@ const entryDialog=createEntryDialog(async({root,folder,name,kind})=>{
 });
 const newFolder=treeTool('new-folder','New folder','M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v8m-4-4h8');
 treeToolButtons.insertBefore(newFolder,$('open-folder'));newFolder.addEventListener('click',()=>newTreeEntry('directory'));
-async function newTreeEntry(kind){
+async function newTreeEntry(kind,targetFolder){
  if(!project?.rootPath || project.singleFile)await openFolderDialog();
  if(!project?.rootPath || project.singleFile)return;
- const folder=selectedCreationFolder ?? breadcrumbFolder ?? (activeProjectPath?.includes('/')?activeProjectPath.slice(0,activeProjectPath.lastIndexOf('/')):'');
+ const folder=targetFolder ?? selectedCreationFolder ?? breadcrumbFolder ?? (activeProjectPath?.includes('/')?activeProjectPath.slice(0,activeProjectPath.lastIndexOf('/')):'');
  entryDialog.open({root:project.rootPath,folder,kind});
 }
 $('project-tree').addEventListener('click',event=>{
@@ -1211,6 +1211,28 @@ async function applyTreeRename({root,from,to}){
   if(paneBridge)await paneBridge.call('location',{root,path:activeProjectPath});
 }
 if(paneBridge)paneBridge.handle('renamed',applyTreeRename);
+async function applyTreeDeletion({root,path}){
+ if(project?.rootPath!==root)return;
+ const affected=value=>value===path || value?.startsWith(path+'/');
+ if(affected(activeProjectPath))clearWorkspaceDocument();
+ fileHistory=fileHistory.filter(entry=>entry.root!==root || !affected(entry.path));historyIndex=Math.min(historyIndex,fileHistory.length-1);updateFileHistory();
+ if(affected(selectedCreationFolder))selectedCreationFolder=null;
+ if(affected(breadcrumbFolder))breadcrumbFolder=null;
+ await loadWorkspace();
+}
+if(paneBridge)paneBridge.handle('deleted',applyTreeDeletion);
+async function deleteTreeEntry(path){
+ if(movingProjectFile)throw Error('Please wait for the current file operation.');
+ if(!project?.rootPath || project.singleFile)throw Error('Open a project folder before deleting.');
+ if(!window.confirm(`Move "${path}" to Trash?`))return;
+ movingProjectFile=true;const root=project.rootPath;
+ try{
+  await flushPane();if(splitView?.isOpen())await splitView.call('flush');
+  await serverData('delete_review_project_entry',{root,path});
+  await applyTreeDeletion({root,path});
+  if(splitView?.isOpen())await splitView.call('deleted',{root,path});
+ }finally{movingProjectFile=false;}
+}
 async function renameTreeEntry(path,name){
   if(movingProjectFile)throw Error('Please wait for the current file operation.');
   if(!project?.rootPath || project.singleFile)throw Error('Open a project folder before renaming.');
