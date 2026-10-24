@@ -1138,12 +1138,14 @@ function renderProjectTree() {
   function children(nodes,parent) {
     const list=document.createElement('ul');parent.append(list);
     for(const node of treePreferences.sort(nodes)) {
+      if(node.deleted)continue;
       const row=document.createElement('li');list.append(row);
       if(node.type==='directory') {
         const folder=document.createElement('details'),title=document.createElement('summary');folder.dataset.projectFolder=node.path;folder.open=expanded.has(node.path) || (treeAutoExpand && (node.path===breadcrumbFolder || !!breadcrumbFolder?.startsWith(`${node.path}/`) || !!activeProjectPath?.startsWith(`${node.path}/`)));const label=document.createElement('span');label.className='file-label';label.textContent=node.name;title.append(label);if(viewerPreferences.showGitChanges)appendGitBadge(title,node.git);if(node.path===breadcrumbFolder)title.dataset.breadcrumbActive='true';folder.append(title);row.append(folder);children(node.children,folder);
       } else {
-        const button=document.createElement('button');button.type='button';button.dataset.projectPath=node.path;button.setAttribute('aria-disabled',String(!node.supported));
-        button.draggable=!!project.rootPath && !project.singleFile;
+        const button=document.createElement('button');button.type='button';button.dataset.projectPath=node.path;button.setAttribute('aria-disabled',String(node.deleted || !node.supported));
+        if(node.deleted)button.dataset.deleted='true';
+        button.draggable=!!project.rootPath && !project.singleFile && !node.deleted;
         button.title=node.deleted ? `${node.path} · Deleted file` : node.supported ? node.path : `${node.path} · Unsupported file type`;
         if(node.path===activeProjectPath)button.setAttribute('aria-current','page');
         const symbol=document.createElement('span');symbol.className='file-symbol';symbol.dataset.kind=isImage(node.name)?'image':isMarkdown(node.name)?'markdown':/\.svg$/i.test(node.name)?'vector':'code';symbol.setAttribute('aria-hidden','true');symbol.textContent=isImage(node.name)?'▧':isMarkdown(node.name)?'M↓':/\.svg$/i.test(node.name)?'▣':'#';
@@ -1321,6 +1323,10 @@ $('file-back').addEventListener('click',()=>moveFileHistory(-1));$('file-forward
 document.addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&['[',']'].includes(event.key)&&!event.altKey){event.preventDefault();event.stopImmediatePropagation();moveFileHistory(event.key==='['?-1:1);}},true);
 async function openProjectFile(path,sourceLine){
   if(!project)return;
+  const find=node=>node.path===path?node:(node.children || []).map(find).find(Boolean);
+  if(find(project.root)?.deleted){
+    $('project-status').hidden=false;$('project-status').textContent=`Cannot open ${path}: This file has been deleted from disk. It is shown only as a Git change.`;return;
+  }
   if(path===activeProjectPath && !sourceLine)return;
   if(!(await canLeaveFile()))return;
   if(fileHistory[historyIndex])fileHistory[historyIndex].scroll=viewport().scrollTop;

@@ -1,4 +1,4 @@
-"""Build a development-installable macOS ZIP without npm runtime dependencies."""
+"""Build a self-contained macOS arm64 MCP plugin ZIP and verify its runtime."""
 import hashlib
 import json
 import platform
@@ -54,9 +54,12 @@ with tempfile.TemporaryDirectory(prefix='markatlas-package-') as temporary:
     (stage / 'mcp.json').write_text(json.dumps(config, indent=2) + '\n')
     (stage / 'package.json').write_text(json.dumps({
         'name': manifest['name'], 'version': version, 'private': True,
+        'os': ['darwin'], 'cpu': ['arm64'],
         'type': 'module', 'scripts': {'start': './runtime/node dist/server.js'},
     }, indent=2) + '\n')
     (stage / 'README.md').write_text(f'''# MarkAtlas {version} — macOS Apple Silicon
+
+**English** | [简体中文](README.zh-CN.md)
 
 This desktop package includes Node {node_version}, the built MCP server and
 viewer, JavaScript dependencies, Poppler PDF tools and libraries, and the compiled native file/folder chooser.
@@ -75,13 +78,38 @@ Keep this directory intact and preserve executable permissions when extracting.
 
 ## Submission status
 
-This is a desktop development/distribution package, not an approved public
-release. Public submission still needs publisher verification and local-MCP
-allowlisting, listing URLs, compliant PNG icons, review cases and a recorded
-demo, publication targeting, and the portal's required checks/attestations.
+MarkAtlas has been submitted to OpenAI for review. Public plugin search is not
+available yet. If approved and published, MarkAtlas will be available from the
+public Plugins Directory. This package is for local installation and testing.
 
 Third-party licenses are in licenses/. Matching PDF component sources and build recipes
 are in third-party-sources/pdf/. See LICENSE for MarkAtlas's license.
+''')
+    (stage / 'README.zh-CN.md').write_text(f'''# MarkAtlas {version} — macOS Apple Silicon
+
+[English](README.md) | **简体中文**
+
+本桌面分发包包含 Node {node_version}、构建好的 MCP 服务和查看器、JavaScript 依赖、
+Poppler PDF 工具及其运行库，以及已编译的原生文件与文件夹选择器。
+无需安装 npm 或执行构建。请通过桌面宿主支持的本地插件流程安装；仅解压 ZIP 不等于安装插件。
+解压时请保持目录完整，并保留可执行文件权限。
+
+## 环境要求
+
+- 仅支持 Apple Silicon（arm64）Mac；不适用于 Intel Mac、Windows 或 Linux。
+- 需要支持 MCP Apps 和原生消息及附件的兼容桌面宿主。
+- PDF 提取和渲染使用附带的 Poppler，无需安装 Homebrew。
+- 后台解释需要宿主 MCP sampling 或已安装并登录的 Codex CLI。
+  如果宿主无法从 PATH 找到 CLI，请设置 MARKATLAS_CODEX_PATH。
+- 精确的 LaTeX 映射需要 SyncTeX；编译使用你自行安装的 LaTeX 工具链。
+
+## 审核状态
+
+MarkAtlas 已提交 OpenAI 审核，目前尚不支持公共插件搜索。如果审核通过并正式发布，
+就可以通过公共插件目录安装。本分发包用于本地安装和测试。
+
+第三方许可证位于 licenses/，对应 PDF 组件源码与构建配方位于 third-party-sources/pdf/。
+MarkAtlas 本身的许可证请参阅 LICENSE。
 ''')
     notices = stage / 'licenses'
     notices.mkdir()

@@ -4,6 +4,7 @@ import {constants} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {tmpdir} from 'node:os';
+import {execFileSync} from 'node:child_process';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {ListRootsRequestSchema} from '@modelcontextprotocol/sdk/types.js';
@@ -13,6 +14,11 @@ const config = JSON.parse(await readFile(join(root, 'mcp.json'), 'utf8')).mcpSer
 const fixture = await realpath(await mkdtemp(join(tmpdir(), 'markatlas-package-check-')));
 const expand = value => value.replaceAll('${PLUGIN_ROOT}', root);
 await access(resolve(root, config.command), constants.X_OK);
+const runtime=JSON.parse(execFileSync(resolve(root,config.command),['-p','JSON.stringify({platform:process.platform,arch:process.arch})'],{encoding:'utf8',env:{PATH:'/usr/bin:/bin'}}));
+assert.deepEqual(runtime,{platform:'darwin',arch:'arm64'});
+const metadata=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
+assert.deepEqual(metadata.os,['darwin']);assert.deepEqual(metadata.cpu,['arm64']);
+assert.equal(metadata.version,JSON.parse(await readFile(join(root,'plugin.json'),'utf8')).version);
 await access(join(root, 'dist/FolderPicker.app/Contents/MacOS/folder-picker'), constants.X_OK);
 const transport = new StdioClientTransport({
   command: resolve(root, config.command), args: config.args.map(expand), cwd: expand(config.cwd),
@@ -40,6 +46,15 @@ try {
   }});
   assert(!saved.isError);
   assert.match(await readFile(join(fixture, 'README.md'), 'utf8'), /Saved through packaged MCP/);
+  for(const name of ['pipeline.py','settings.custom']){
+    await writeFile(join(fixture,name),'# Packaged text fixture\n');
+    const opened=await client.callTool({name:'read_markdown_project_file',arguments:{root:fixture,path:name}});
+    assert(!opened.isError,JSON.stringify(opened));assert.equal(opened.structuredContent.kind,'text');
+    const updated=await client.callTool({name:'save_review_project_file',arguments:{root:fixture,path:name,text:'# Updated through packaged MCP\n',expectedEtag:opened.structuredContent.etag}});
+    assert(!updated.isError,JSON.stringify(updated));assert.match(await readFile(join(fixture,name),'utf8'),/Updated through packaged MCP/);
+  }
+  const missing=await client.callTool({name:'read_markdown_project_file',arguments:{root:fixture,path:'missing.py'}});
+  assert.equal(missing.isError,true);assert.match(missing.content[0].text,/moved or deleted/);
   const denied = await client.callTool({name: 'read_markdown_project_file', arguments: {root: fixture, path: '../outside.md'}});
   assert.equal(denied.isError, true);
   await copyFile(join(root,'review-fixtures/review.pdf'), join(fixture,'review.pdf'));

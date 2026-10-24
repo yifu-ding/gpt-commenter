@@ -4,7 +4,7 @@ export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPre
   for(const [action,label,handler] of [['new-folder','New folder',onCreate],['new-file','New file',onCreate],['delete','Delete',onDelete]])if(handler){const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.dataset.action=action;button.textContent=label;menu.append(button);}
   let cancelRename=null;
   function startRename(target){
-    if(!onRename || !root())return;cancelRename?.();
+    if(!onRename || !root() || target.dataset.deleted==='true')return;cancelRename?.();
     const path=target.dataset.projectPath ?? target.parentElement.dataset.projectFolder;if(!path)return;
     const label=target.querySelector('.file-label') || target,original=[...label.childNodes];
     const input=document.createElement('input');input.className='tree-rename-input';input.setAttribute('aria-label','Rename');input.value=path.split('/').at(-1);
@@ -39,7 +39,9 @@ export function createFileMenu({tree,menu,root,onError,onReveal,onSplit,onWebPre
     for(const button of buttons)if(button.dataset.split){button.hidden=!onSplit || !target.dataset.projectPath;button.disabled=!selected.absolute;}
     for(const button of buttons)if(button.dataset.action==='web-preview')button.hidden=!onWebPreview || !target.dataset.projectPath || !/\.html?$/i.test(path);
     for(const button of buttons)if(button.dataset.action==='native-preview'){button.hidden=!onNativePreview || !target.dataset.projectPath;button.disabled=!selected.absolute;}
-    for(const button of buttons)if(button.dataset.action==='web-preview')button.disabled=!selected.absolute;menu.hidden=false;
+    for(const button of buttons)if(button.dataset.action==='web-preview')button.disabled=!selected.absolute;
+    if(target.dataset.deleted==='true')for(const button of buttons)if(button.dataset.action || button.dataset.split)button.disabled=true;
+    menu.hidden=false;
     const anchor=target.getBoundingClientRect(),rect=menu.getBoundingClientRect();
     const x=event.clientX || anchor.left,y=event.clientY || anchor.bottom;
     menu.style.left=`${Math.max(8,Math.min(x,window.innerWidth-rect.width-8))}px`;

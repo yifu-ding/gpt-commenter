@@ -9,6 +9,12 @@ import {fileURLToPath} from 'node:url';
 import {buildProject} from './project.js';
 const fileVersion=info=>[info.dev,info.ino,info.size,info.mtimeMs,info.ctimeMs].join(':');
 const ignored=new Set(['.markatlas','.git','node_modules','.codex','.agents','.aws']);
+async function existingPath(path){
+  try{return await realpath(path);}catch(error){
+    if(error.code==='ENOENT')throw Object.assign(Error(`File or folder not found: ${path}. It may have been moved or deleted. Refresh the file tree or choose an existing file.`),{code:'ENOENT'});
+    throw error;
+  }
+}
 export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJECT_ROOT) {
   let allowed=[];
   const connected=new Set(),singleFiles=new Map();
@@ -23,7 +29,7 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
   async function inside(root,path) {
     const folderAccess=allowed.includes(root) || connected.has(root);
     if(!folderAccess && !singleFiles.has(root))throw Error('Project is no longer available. Refresh the file tree.');
-    const target=await realpath(resolve(root,path)),rel=relative(root,target);
+    const target=await existingPath(resolve(root,path)),rel=relative(root,target);
     if(rel.startsWith('..') || isAbsolute(rel) || rel.split('/').some(p=>ignored.has(p)))throw Error('File is outside the project.');
     if(!folderAccess && !singleFiles.get(root)?.has(target))throw Error('Only the selected file is connected. Open its folder to access other files.');
     return target;
@@ -31,7 +37,7 @@ export function workspaceAccess(getRoots,fallback=process.env.GPT_COMMENTER_PROJ
   return {
     async connectFile(filePath){
       if(!isAbsolute(filePath))throw Error('Choose a local file.');
-      const target=await realpath(filePath),info=await stat(target);
+      const target=await existingPath(filePath),info=await stat(target);
       if(!info.isFile())throw Error('Choose a file, not a folder.');
       await roots();
       const folders=[...allowed,...connected].filter(folder=>{const rel=relative(folder,target);return !rel.startsWith('..') && !isAbsolute(rel);}).sort((a,b)=>b.length-a.length);
