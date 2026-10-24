@@ -13,7 +13,7 @@ import {htmlPreviewDocument} from './html-preview.js';
 import {resolveObsidianPath,embeddedSection} from './obsidian-links.js';
 import {renamePaths} from './rename-paths.js';
 import {createFileMenu} from './file-menu.js';
-import {createPdfViewer,PDF_MIN_ZOOM,PDF_MAX_ZOOM} from './pdf-viewer.js';
+import {clippedPdfWord,createPdfViewer,PDF_MIN_ZOOM,PDF_MAX_ZOOM} from './pdf-viewer.js';
 import {createEditHistory} from './edit-history.js';
 import {ChangeSet} from '@codemirror/state';
 import {moveAnnotations} from './annotation-edits.js';
@@ -893,7 +893,7 @@ async function displayPdf(data,refresh=false){
   pdfDocument=data;linkedPdf=data.main?{root:data.root,path:data.path,main:data.main}:null;sourcePath=data.sourcePath;activeProjectPath=data.path;currentEtag=data.etag;codeFile=false;fileRefresh.stop();
   if(!refresh)pdfViewer.destroy();
   // Recompute page geometry from tracked text offsets; never keep coordinates from an old build.
-  items=items.map(item=>{const page=data.pages.find(p=>item.startOffset>=p.startOffset && item.startOffset<p.endOffset);if(item.pdf?.region)return {...item,anchorStatus:item.pdf.fingerprint===data.fingerprint?item.anchorStatus:'edited'};if(!item.pdf || !page)return item;const words=page.words.filter(w=>w.endOffset>item.startOffset&&w.startOffset<item.endOffset);return {...item,pdf:{...item.pdf,path:data.path,fingerprint:data.fingerprint,page:page.number,x:words[0]?.x || 0,y:words[0]?.y || 0,rects:words.map(w=>({x:w.x,y:w.y,width:w.width,height:w.height})),source:undefined}};});
+  items=items.map(item=>{const page=data.pages.find(p=>item.startOffset>=p.startOffset && item.startOffset<p.endOffset);if(item.pdf?.region)return {...item,anchorStatus:item.pdf.fingerprint===data.fingerprint?item.anchorStatus:'edited'};if(!item.pdf || !page)return item;const words=page.words.filter(w=>w.endOffset>item.startOffset&&w.startOffset<item.endOffset);return {...item,pdf:{...item.pdf,path:data.path,fingerprint:data.fingerprint,page:page.number,x:words[0]?.x || 0,y:words[0]?.y || 0,rects:words.map(w=>clippedPdfWord(w,item.startOffset,item.endOffset)).filter(Boolean),source:undefined}};});
   persist();syncAnnotations().catch(()=>{});render();renderBreadcrumb();renderProjectTree();$('project-status').hidden=true;
   scrollViewport({top:scroll});
   schedulePdfPoll();

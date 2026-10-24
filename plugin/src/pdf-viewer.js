@@ -1,5 +1,23 @@
 // Continuous PDF pages use fixed page coordinates; image loading follows visibility.
 export const PDF_MIN_ZOOM=.5,PDF_MAX_ZOOM=16;
+// PDF extractors often group a whole Chinese line as one word. Clip that box
+// to the selected character interval, using browser glyph widths when available.
+export function clippedPdfWord(word,startOffset,endOffset,span){
+ const length=word.text.length,start=Math.max(0,startOffset-word.startOffset),end=Math.min(length,endOffset-word.startOffset);
+ if(end<=start)return null;
+ let left=start/length,right=end/length;
+ if(span?.firstChild && (start>0 || end<length)){
+  const range=span.ownerDocument.createRange();
+  range.setStart(span.firstChild,0);range.setEnd(span.firstChild,length);
+  const full=range.getBoundingClientRect?.();
+  if(full?.width>0){
+   range.setStart(span.firstChild,start);range.setEnd(span.firstChild,end);
+   const part=range.getBoundingClientRect();
+   left=Math.max(0,Math.min(1,(part.left-full.left)/full.width));right=Math.max(left,Math.min(1,(part.right-full.left)/full.width));
+  }
+ }
+ return {x:word.x+word.width*left,y:word.y,width:word.width*(right-left),height:word.height};
+}
 export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,onPage=()=>{},onZoom=()=>{},onRegionMode=()=>{}}){
   let document=null,epoch=0,notes=[],resizeObserver=null,intersection=null;
   let regionMode=false,drag=null;
@@ -7,7 +25,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
   const frames=new Map();let zoom=1,resizePages=()=>{},currentPage=1,pageObserver=null;
   function destroy(){setRegionMode(false);++epoch;resizeObserver?.disconnect();intersection?.disconnect();pageObserver?.disconnect();pageObserver=null;resizeObserver=intersection=null;frames.clear();container.replaceChildren();document=null;}
   function marks(){
-    for(const {page,highlights} of frames.values()){
+    for(const {page,highlights,wordSpans} of frames.values()){
       highlights.replaceChildren();
       for(const item of notes){
         if(item.pdf?.region){
@@ -18,7 +36,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
           highlights.append(mark);continue;
         }
         const words=page.words.filter(w=>w.endOffset>item.startOffset && w.startOffset<item.endOffset);
-        for(const word of words){const mark=window.document.createElement('span');mark.className='pdf-highlight';if(item.anchorStatus==='edited')mark.classList.add('pdf-changed');Object.assign(mark.style,{left:`${word.x}px`,top:`${word.y}px`,width:`${word.width}px`,height:`${word.height}px`});if(!item.temporary){mark.dataset.annotation=item.id;mark.tabIndex=0;mark.setAttribute('role','button');mark.setAttribute('aria-label',`Review note on PDF page ${page.number}`);const activate=event=>{event.stopPropagation();onNote(item,mark.getBoundingClientRect());};mark.addEventListener('click',activate);mark.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();activate(event);}});}highlights.append(mark);}
+        for(const word of words){const rect=clippedPdfWord(word,item.startOffset,item.endOffset,wordSpans.get(word.startOffset));if(!rect)continue;const mark=window.document.createElement('span');mark.className='pdf-highlight';if(item.anchorStatus==='edited')mark.classList.add('pdf-changed');Object.assign(mark.style,{left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`});if(!item.temporary){mark.dataset.annotation=item.id;mark.tabIndex=0;mark.setAttribute('role','button');mark.setAttribute('aria-label',`Review note on PDF page ${page.number}`);const activate=event=>{event.stopPropagation();onNote(item,mark.getBoundingClientRect());};mark.addEventListener('click',activate);mark.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();activate(event);}});}highlights.append(mark);}
 
       }
     }
@@ -31,8 +49,8 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
     async function load(number){
       const entry=frames.get(number);if(!entry || entry.loaded)return;entry.loaded=true;
       const text=window.document.createElement('div');text.className='pdf-text';text.setAttribute('aria-label',`Selectable text, PDF page ${number}`);
-      for(const word of entry.page.words){const span=window.document.createElement('span');span.className='pdf-word';span.dataset.start=word.startOffset;span.dataset.end=word.endOffset;span.dataset.page=number;span.textContent=word.text+' ';Object.assign(span.style,{left:`${word.x}px`,top:`${word.y}px`,height:`${word.height}px`,fontSize:`${word.height*.9}px`,lineHeight:`${word.height}px`});text.append(span);}
-      entry.canvas.insertBefore(text,entry.highlights);
+      for(const word of entry.page.words){const span=window.document.createElement('span');span.className='pdf-word';span.dataset.start=word.startOffset;span.dataset.end=word.endOffset;span.dataset.page=number;span.textContent=word.text+' ';Object.assign(span.style,{left:`${word.x}px`,top:`${word.y}px`,height:`${word.height}px`,fontSize:`${word.height*.9}px`,lineHeight:`${word.height}px`});text.append(span);entry.wordSpans.set(word.startOffset,span);}
+      entry.canvas.insertBefore(text,entry.highlights);marks();
       try{const result=await loadPage(data,number);if(current===epoch)entry.image.src=result.image;}catch(error){if(current===epoch){entry.loaded=false;onError(error);}}
     }
     for(const page of data.pages){
@@ -46,7 +64,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
         if(link.page){anchor.href=`#page-${link.page}`;anchor.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();frames.get(link.page)?.frame.scrollIntoView({block:'start',behavior:'smooth'});});}else{anchor.href=link.url;anchor.target='_blank';anchor.rel='noopener noreferrer';}
         canvas.append(anchor);
       }
-      frame.append(image,canvas);stack.append(frame);frames.set(page.number,{page,frame,canvas,image,highlights,loaded:false});
+      frame.append(image,canvas);stack.append(frame);frames.set(page.number,{page,frame,canvas,image,highlights,wordSpans:new Map(),loaded:false});
     }
     resizePages=resize;resize();container.scrollLeft=(parseFloat(stack.style.width)-Math.max(100,container.getBoundingClientRect().width))/2;marks();onZoom(zoom);
     if(typeof ResizeObserver!=='undefined'){resizeObserver=new ResizeObserver(resize);resizeObserver.observe(container);}
@@ -74,7 +92,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
     const start=Number(a.span.dataset.start)+Math.min(a.offset,a.span.textContent.trimEnd().length),end=Number(b.span.dataset.start)+Math.min(b.offset,b.span.textContent.trimEnd().length);if(end<=start)return;
     const firstPage=Number(a.span.dataset.page),lastPage=Number(b.span.dataset.page),page=document.pages[firstPage-1];const words=page.words.filter(w=>w.endOffset>start&&w.startOffset<end);if(!words.length)return;
     const rects=[...range.getClientRects()],anchor=rects.at(-1) || a.span.getBoundingClientRect();
-    onSelection({startOffset:start,endOffset:end,startLine:document.text.slice(0,start).split('\n').length,endLine:document.text.slice(0,end).split('\n').length,selectedText:document.text.slice(start,end),mappingStatus:'exact',pdf:{root:document.root,path:document.path,main:document.main,fingerprint:document.fingerprint,page:firstPage,endPage:lastPage,x:words[0].x,y:words[0].y,rects:words.map(w=>({x:w.x,y:w.y,width:w.width,height:w.height}))}},anchor);
+    onSelection({startOffset:start,endOffset:end,startLine:document.text.slice(0,start).split('\n').length,endLine:document.text.slice(0,end).split('\n').length,selectedText:document.text.slice(start,end),mappingStatus:'exact',pdf:{root:document.root,path:document.path,main:document.main,fingerprint:document.fingerprint,page:firstPage,endPage:lastPage,x:words[0].x,y:words[0].y,rects:words.map(w=>clippedPdfWord(w,start,end,frames.get(firstPage)?.wordSpans.get(w.startOffset))).filter(Boolean)}},anchor);
   }
   function setZoom(value,point){
     const next=Math.max(PDF_MIN_ZOOM,Math.min(PDF_MAX_ZOOM,value));if(next===zoom)return;
