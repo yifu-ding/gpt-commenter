@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {createFileMenu} from './src/file-menu.js';
-const dom=new JSDOM(`<nav id="tree"><details data-project-folder="docs"><summary>docs</summary><button data-project-path="docs/my note.md"><span>my note.md</span></button></details></nav><div id="menu" hidden><button data-copy-path="absolute">Copy path</button><button data-copy-path="relative">Copy relative path</button></div><button id="outside">Outside</button>`);
+const dom=new JSDOM(`<nav id="tree"><details data-project-folder="docs"><summary>docs</summary><button data-project-path="docs/my note.md"><span>my note.md</span></button></details><button data-project-path="docs/review.html">review.html</button></nav><div id="menu" hidden><button data-copy-path="absolute">Copy path</button><button data-copy-path="relative">Copy relative path</button><button data-action="web-preview">Open with Web Server</button><button data-action="native-preview">Open in Native Preview</button></div><button id="outside">Outside</button>`);
 const {window}=dom;globalThis.window=window;globalThis.document=window.document;Object.defineProperty(globalThis,'navigator',{value:window.navigator,configurable:true});
 const tree=document.getElementById('tree'),menu=document.getElementById('menu'),buttons=menu.querySelectorAll('button'),file=tree.querySelector('[data-project-path]'),folder=tree.querySelector('summary');
-let root='/project/',copied=[],errors=[];
+let root='/project/',copied=[],errors=[],previews=[],nativePreviews=[],created=[],deleted=[];
 Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>copied.push(text)},configurable:true});
 menu.getBoundingClientRect=()=>({width:166,height:80});
-createFileMenu({tree,menu,root:()=>root,onError:error=>errors.push(error.message)});
+createFileMenu({tree,menu,onCreate:async(kind,folder)=>created.push({kind,folder}),onDelete:async path=>deleted.push(path),root:()=>root,onError:error=>errors.push(error.message),onNativePreview:async path=>nativePreviews.push(path),onWebPreview:async path=>previews.push(path)});
 const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
 function open(target=file){const event=new window.MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:1010,clientY:760});target.dispatchEvent(event);assert.equal(event.defaultPrevented,true);assert.equal(menu.hidden,false);}
 open(file.firstChild);buttons[0].click();await flush();assert.equal(copied.at(-1),'/project/docs/my note.md');assert.equal(menu.hidden,true);assert.equal(document.activeElement,file);
@@ -18,4 +18,10 @@ open();document.getElementById('outside').dispatchEvent(new window.Event('pointe
 root=null;open();assert.equal(buttons[0].disabled,true,'do not invent full paths for browser-only folders');assert.equal(document.activeElement,buttons[1]);buttons[1].click();await flush();assert.equal(copied.at(-1),'docs/my note.md');
 root='/project';navigator.clipboard.writeText=async()=>{throw Error('Clipboard denied');};document.execCommand=command=>{assert.equal(command,'copy');copied.push(document.querySelector('textarea').value);return true;};open();buttons[0].click();await flush();assert.equal(copied.at(-1),'/project/docs/my note.md');assert.equal(document.querySelector('textarea'),null);
 document.execCommand=()=>false;open();buttons[0].click();await flush();assert.match(errors.at(-1),/Clipboard access is unavailable/);assert.equal(menu.hidden,true);
+open();assert.equal(buttons[2].hidden,true);open(tree.querySelector('[data-project-path="docs/review.html"]'));assert.equal(buttons[2].hidden,false);buttons[2].click();await flush();assert.deepEqual(previews,['docs/review.html']);assert.equal(menu.hidden,true);
+open();assert.equal(buttons[3].hidden,false);buttons[3].click();await flush();assert.deepEqual(nativePreviews,['docs/my note.md']);open(folder);assert.equal(buttons[3].hidden,true);
+open(folder);menu.querySelector('[data-action="new-folder"]').click();await flush();assert.deepEqual(created.at(-1),{kind:'directory',folder:'docs'});
+open(file);menu.querySelector('[data-action="new-file"]').click();await flush();assert.deepEqual(created.at(-1),{kind:'file',folder:'docs'});
+assert.equal(menu.lastElementChild.dataset.action,'delete');open(folder);menu.lastElementChild.click();await flush();assert.deepEqual(deleted,['docs']);
+root=null;open();for(const action of ['new-file','new-folder','delete'])assert.equal(menu.querySelector(`[data-action="${action}"]`).disabled,true);
 console.log('File/folder path menu, relative paths, keyboard dismissal, clipboard fallback, and failure checks passed');window.close();

@@ -3,11 +3,11 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {generateExplanation} from './src/background-explanation.js';
-import {explanationSettings} from './src/explanation-settings.js';
+import {explanationSettings,defaults} from './src/explanation-settings.js';
 const base=await mkdtemp(join(tmpdir(),'markatlas-settings-'));
 try{
  const store=explanationSettings(base);
- assert.deepEqual(await store.read(),{explanationModel:'gpt-6-luna'});
+ assert.deepEqual(await store.read(),defaults);
  await store.update({explanationModel:'gpt-6.1-sol'});
  assert.equal((await explanationSettings(base).read()).explanationModel,'gpt-6.1-sol');
  await assert.rejects(()=>store.update({explanationModel:'invalid'}));
@@ -56,6 +56,7 @@ try{
  await host.callTool({name:'markatlas_settings_update',arguments:{set:{explanationModel:'gpt-6.1-sol'}}});
  const next=await host.callTool({name:'generate_review_explanation',arguments:{annotation}});
  assert.equal(next.structuredContent.model,'gpt-6.1-sol');
- assert.equal(samplingCalls.length,2);assert.equal(samplingCalls[1].modelPreferences.hints[0].name,'gpt-6.1-sol');
+ const visual=await host.callTool({name:'generate_review_explanation',arguments:{annotation:{...annotation,html:{mapping:'region',region:{x:0,y:0,width:100,height:50},screenshot:'data:image/jpeg;base64,YQ=='}}}});assert.equal(visual.isError,undefined);assert.ok(samplingCalls.at(-1).messages.some(m=>m.content.type==='image' && m.content.data==='YQ=='));
+ assert.equal(samplingCalls.length,3);assert.equal(samplingCalls[1].modelPreferences.hints[0].name,'gpt-6.1-sol');
 }finally{await host.close();await rm(data,{recursive:true,force:true});}
 console.log('Real MCP background request, settings, and stored reply checks passed');

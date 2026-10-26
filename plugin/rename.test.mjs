@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,realpath} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {workspaceAccess} from './src/workspace.js';
+import {reviewStore} from './src/review-store.js';
+import {JSDOM} from 'jsdom';
+import {createFileMenu} from './src/file-menu.js';
+const root=await realpath(await mkdtemp(join(tmpdir(),'markatlas-rename-')));
+try{
+ const access=workspaceAccess(async()=>[],root);await access.list();await mkdir(join(root,'docs'));await writeFile(join(root,'docs/a.md'),'hello');await writeFile(join(root,'docs/b.md'),'other');
+ await assert.rejects(access.rename(root,'docs/a.md','b.md'),/already exists/);assert.equal(await readFile(join(root,'docs/b.md'),'utf8'),'other');
+ for(const name of ['',' ','..','../escape','.git'])await assert.rejects(access.rename(root,'docs/a.md',name));
+ assert.equal((await access.rename(root,'docs/a.md','renamed.md')).path,'docs/renamed.md');
+ await mkdir(join(root,'existing'));await assert.rejects(access.rename(root,'docs','existing'),/already exists/);
+ assert.equal((await access.rename(root,'docs','notes')).path,'notes');assert.equal(await readFile(join(root,'notes/renamed.md'),'utf8'),'hello');
+ const store=reviewStore(join(root,'store')),id='12345678-1234-1234-1234-123456789012';
+ await store.update({root,identity:'project:'+root+'/notes/renamed.md',sourcePath:root+'/notes/renamed.md',sourceName:'notes/renamed.md',text:'hello',baseText:'hello',annotations:[{id,startOffset:0,endOffset:5,message:'notes/renamed.md'}]});
+ await store.project(root,{drafts:{['project:'+root+'/notes/renamed.md']:{text:'hello'}},entries:[[id,{root,path:'notes/renamed.md',identity:'project:'+root+'/notes/renamed.md'}]]});
+ await store.renamed(root,'notes','renamed');const state=await store.project(root);assert.equal(state.entries[0][1].path,'renamed/renamed.md');assert.ok(state.drafts['project:'+root+'/renamed/renamed.md']);const note=await store.resolve(id);assert.equal(note.sourcePath,root+'/renamed/renamed.md');assert.equal(note.comment,'notes/renamed.md');
+ const dom=new JSDOM('<nav><details data-project-folder="docs"><summary><span class="file-label">docs</span></summary><button data-project-path="docs/a.md"><span class="file-label">a.md</span></button></details></nav><div id="menu"><button data-copy-path="absolute">Copy</button></div>');globalThis.window=dom.window;globalThis.document=dom.window.document;
+ const tree=document.querySelector('nav'),menu=document.querySelector('#menu');let calls=[];
+ createFileMenu({tree,menu,root:()=>root,onError:error=>{throw error;},onRename:async(...args)=>calls.push(args)});
+ const double=target=>target.dispatchEvent(new window.MouseEvent('dblclick',{bubbles:true,cancelable:true}));
+ double(tree.querySelector('button'));double(tree.querySelector('summary'));assert.equal(document.querySelector('input'),null,'row backgrounds never rename');
+ tree.querySelector('button .file-label').click();tree.querySelector('button .file-label').click();assert.equal(document.querySelector('input'),null,'separate clicks do not rename');
+ const key=value=>document.querySelector('input').dispatchEvent(new window.KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true}));
+ double(tree.querySelector('button .file-label'));key('Escape');assert.equal(document.querySelector('input'),null);assert.equal(calls.length,0);
+ double(tree.querySelector('button .file-label'));document.querySelector('input').value='  ';key('Enter');assert.equal(calls.length,0);assert.equal(tree.querySelector('button .file-label').textContent,'a.md');
+ double(tree.querySelector('summary .file-label'));document.querySelector('input').value='new docs';key('Enter');await new Promise(r=>setTimeout(r,0));assert.deepEqual(calls,[['docs','new docs']]);
+ tree.querySelector('button').dispatchEvent(new window.MouseEvent('contextmenu',{bubbles:true,cancelable:true}));menu.querySelector('[data-action="rename"]').click();assert.equal(document.querySelector('input').value,'a.md');document.querySelector('input').value='new.md';key('Enter');await new Promise(r=>setTimeout(r,0));assert.deepEqual(calls.at(-1),['docs/a.md','new.md']);dom.window.close();
+ console.log('Rename: file/folder, conflicts, invalid names, note migration, double-click, menu and cancellation passed');
+}finally{await rm(root,{recursive:true,force:true});}

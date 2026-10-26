@@ -12,14 +12,16 @@ const {window}=dom;window.setImmediate=setImmediate;window.clearImmediate=clearI
 Object.defineProperty(window.crypto,'subtle',{value:webcrypto.subtle});window.TextEncoder=TextEncoder;window.TextDecoder=TextDecoder;
 window.scrollTo=()=>{};window.requestAnimationFrame=cb=>setTimeout(()=>cb(Date.now()),1);window.cancelAnimationFrame=clearTimeout;window.Range.prototype.getClientRects=()=>[];window.Range.prototype.getBoundingClientRect=()=>({left:0,right:0,top:0,bottom:0,width:0,height:0});window.workspaceRoot='/current/project';window.workspaceName='Current project';window.projectReads=0;window.projectLists=0;window.projectText='# From project server';window.projectEtag='1';window.contextCalls=[];window.chatCalls=[];window.hostState=undefined;window.allowContext=true;
 const inputSource=readFileSync(new URL('./src/viewer.js',import.meta.url),'utf8')
-.replace("import {App} from '@modelcontextprotocol/ext-apps';",`class App {constructor(info){window.appInfo=info;window.testApp=this;this.listeners={};}addEventListener(n,cb){this.listeners[n]=cb;}async callServerTool({name,arguments:args}){if(name==='prepare_review_batch'){if(window.batchError)throw Error(window.batchError);window.batchPrepare=args;return {structuredContent:{entries:args.entries}};}if(name==='generate_review_explanation'){window.lastExplanation=args;window.explanationRequests=(window.explanationRequests||0)+1;return {structuredContent:{requestId:'11111111-1111-4111-8111-'+String(window.explanationRequests).padStart(12,'0')}};}if(name==='read_markdown_explanation'){if(window.replyError)throw Error(window.replyError);window.lastReplyRequest=args;if(window.replyGate)await window.replyGate;return {structuredContent:window.explanationReply || {status:'pending'}};}if(name==='remove_markdown_explanation')return {structuredContent:{status:'removed'}};if(name==='update_review_document'){window.reviewDocument=args;return {structuredContent:{documentId:'test-document'}};}if(name==='save_review_project_file'){window.lastSave=args;if(window.saveGate)await window.saveGate;if(window.saveConflict)throw Error('The file changed on disk. Save was stopped; your edits are still in the editor.');window.projectText=args.text;window.projectEtag=String(Number(window.projectEtag)+1);return {structuredContent:{text:window.projectText,etag:window.projectEtag}};}if(name==='choose_markdown_project_folder'){window.folderChooserCalls=(window.folderChooserCalls||0)+1;if(window.folderChooserError)throw Error(window.folderChooserError);return {structuredContent:window.folderChooserCancelled?{cancelled:true}:{root:{name:'Chosen folder',children:[{type:'directory',name:'docs',path:'docs',children:[{type:'file',name:'nested.md',path:'docs/nested.md',supported:true}]},{type:'file',name:window.projectFileName || (window.codeProject?'code.js':'live.md'),path:window.projectFileName || (window.codeProject?'code.js':'live.md'),supported:true}]},rootPath:'/chosen/folder'}};}if(name==='resolve_native_office_file'){window.nativeResolve=args;return {structuredContent:{path:args.root+'/'+args.path}};}if(name==='list_markdown_project'){window.projectLists++;window.lastListArgs=args;if(window.noWorkspace && !args.folderPath)throw Error('No workspace provided');if(args.folderPath==='/invalid')throw Error('Folder does not exist');return {structuredContent:{root:{name:window.workspaceName,children:[{type:'directory',name:'docs',path:'docs',children:[{type:'file',name:'nested.md',path:'docs/nested.md',supported:true}]},{type:'file',name:window.projectFileName || (window.codeProject?'code.js':'live.md'),path:window.projectFileName || (window.codeProject?'code.js':'live.md'),supported:true}]},rootPath:args.folderPath || window.workspaceRoot}};}if(name==='read_markdown_project_file'){if(window.projectSnapshot)return {structuredContent:args.ifNoneMatch===window.projectSnapshot.etag ? {notModified:true,etag:window.projectSnapshot.etag} : window.projectSnapshot};window.projectReads++;window.projectRequest=args;return {structuredContent:args.ifNoneMatch===window.projectEtag?{notModified:true,etag:window.projectEtag}:{name:args.path,text:window.projectText,etag:window.projectEtag}};}throw Error('Unknown tool');}async connect(){if(!this.listeners.toolinput)throw Error('missing file input');}getHostContext(){return {theme:'dark'};}}`)
+.replace("import {App} from '@modelcontextprotocol/ext-apps';",`class App {constructor(info){window.appInfo=info;window.testApp=this;this.listeners={};}addEventListener(n,cb){this.listeners[n]=cb;}async callServerTool({name,arguments:args}){if(name==='review_project_state')return {structuredContent:{entries:[],drafts:{},saved:true}};if(name==='prepare_review_batch'){if(window.batchError)throw Error(window.batchError);window.batchPrepare=args;return {structuredContent:{entries:args.entries}};}if(name==='generate_review_explanation'){window.lastExplanation=args;window.explanationRequests=(window.explanationRequests||0)+1;return {structuredContent:{requestId:'11111111-1111-4111-8111-'+String(window.explanationRequests).padStart(12,'0')}};}if(name==='read_markdown_explanation'){if(window.replyError)throw Error(window.replyError);window.lastReplyRequest=args;if(window.replyGate)await window.replyGate;return {structuredContent:window.explanationReply || {status:'pending'}};}if(name==='remove_markdown_explanation')return {structuredContent:{status:'removed'}};if(name==='update_review_document'){window.reviewDocument=args;return {structuredContent:{documentId:'test-document'}};}if(name==='save_review_project_file'){window.lastSave=args;if(window.saveGate)await window.saveGate;if(window.saveConflict || (window.strictEtag && args.expectedEtag!==window.projectEtag))throw Error('The file changed on disk. Save was stopped; your edits are still in the editor.');window.projectText=args.text;window.projectEtag=String(Number(window.projectEtag)+1);return {structuredContent:{text:window.projectText,etag:window.projectEtag}};}if(name==='choose_markdown_project_folder'){window.folderChooserCalls=(window.folderChooserCalls||0)+1;if(window.folderChooserError)throw Error(window.folderChooserError);return {structuredContent:window.folderChooserCancelled?{cancelled:true}:{root:{name:'Chosen folder',children:[{type:'directory',name:'docs',path:'docs',children:[{type:'file',name:'nested.md',path:'docs/nested.md',supported:true}]},{type:'file',name:window.projectFileName || (window.codeProject?'code.js':'live.md'),path:window.projectFileName || (window.codeProject?'code.js':'live.md'),supported:true}]},rootPath:'/chosen/folder'}};}if(name==='resolve_native_office_file'){window.nativeResolve=args;return {structuredContent:{path:args.root+'/'+args.path}};}if(name==='list_markdown_project'){window.projectLists++;window.lastListArgs=args;if(window.noWorkspace && !args.folderPath)throw Error('No workspace provided');if(args.folderPath==='/invalid')throw Error('Folder does not exist');return {structuredContent:{root:{name:window.workspaceName,children:[{type:'directory',name:'docs',path:'docs',children:[{type:'file',name:'nested.md',path:'docs/nested.md',supported:true}]},{type:'file',name:window.projectFileName || (window.codeProject?'code.js':'live.md'),path:window.projectFileName || (window.codeProject?'code.js':'live.md'),supported:true}]},rootPath:args.folderPath || window.workspaceRoot}};}if(name==='read_markdown_project_file'){if(window.projectSnapshot)return {structuredContent:args.ifNoneMatch===window.projectSnapshot.etag ? {notModified:true,etag:window.projectSnapshot.etag} : window.projectSnapshot};window.projectReads++;window.projectRequest=args;return {structuredContent:args.ifNoneMatch===window.projectEtag?{notModified:true,etag:window.projectEtag}:{name:args.path,text:window.projectText,etag:window.projectEtag}};}throw Error('Unknown tool');}async connect(){if(!this.listeners.toolinput)throw Error('missing file input');}getHostContext(){return {theme:'dark'};}}`)
 .replace("import {OpenAIExtensions, OpenAIFileEntrypointInputSchema} from '@openai/mcp-extensions/app';",`class OpenAIExtensions {get files(){return window.nativeFiles;}get resources(){return window.resources;}get message(){if(!window.allowContext)return undefined;return {async send(params){window.chatCalls.push(params);return window.sendError?{isError:true}:{};}};}get modelContext(){if(!window.allowContext)return undefined;return {getCurrent:()=>window.hostState,async update(params){window.contextCalls.push(params);window.hostState=params.content.length?{...params,updateId:'update'}:null;return {};}};}}const OpenAIFileEntrypointInputSchema={safeParse(a){return {success:!!a?.file,data:a};}};`);
-const bundle=await build({stdin:{contents:inputSource,resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false,platform:'browser'});
+// Explicit static-renderer fixture for legacy annotation tests; native-ui.test.mjs covers editable Preview.
+const legacyFixture= inputSource.replace("codeMode=isMarkdown(name)?'edit':previewable?'review':'edit'","codeMode=previewable?'review':'edit'");
+const bundle=await build({stdin:{contents:legacyFixture,resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false,platform:'browser'});
 window.eval(bundle.outputFiles[0].text);
 const $=id=>window.document.getElementById(id);
 const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
 async function until(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5));}assert.ok(predicate(),'asynchronous UI update completed');}
-const enter=()=> $('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+const enter=()=> $('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',metaKey:true,bubbles:true,cancelable:true}));
 const escape=()=>window.document.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
 window.resources={async read(){return {contents:[{text:fixture}]};}};
 const input={arguments:{file:{name:'review.md',resourceUri:'file:///review.md'}}};
@@ -29,25 +31,45 @@ assert.equal($('document').querySelector('script'),null);
 assert.equal($('document').querySelector('a').hasAttribute('href'),false);
 assert.equal(window.document.documentElement.dataset.theme,'dark');
 assert.equal(window.appInfo.name,'MarkAtlas');assert.equal(window.appInfo.title,'MarkAtlas');assert.match(window.appInfo.icons[0].src,/^data:image\/svg\+xml;base64,/);
+assert.equal($('mode-cycle').getAttribute('aria-label'),'Preview');assert.equal($('document').contentEditable,'false');
+$('mode-cycle').click();assert.equal($('mode-cycle').getAttribute('aria-label'),'Edit');assert.ok($('document').querySelector('.cm-editor'));
+$('mode-cycle').click();assert.equal($('mode-cycle').getAttribute('aria-label'),'Source');assert.equal(CMView.findFromDOM($('document').querySelector('.cm-editor')).state.readOnly,false);
+$('mode-cycle').click();assert.equal($('mode-cycle').getAttribute('aria-label'),'Preview');assert.equal($('document').querySelector('.cm-editor'),null);
+assert.equal(window.document.body.dataset.treeSide,'left');
+assert.equal($('file-find'),null);assert.equal($('file-search'),null);$('project-search-toggle').click();assert.equal($('project-search-overlay').hidden,false);$('project-search-close').click();assert.equal($('project-search-overlay').hidden,true);
+$('width-mode').click();assert.equal(window.document.body.classList.contains('full-width'),true);$('width-mode').click();
+$('comments-toggle').click();assert.equal($('review-batch').hidden,false);assert.equal($('project-drawer').hidden,false,'both sidebars coexist');
+$('tree-toggle').click();assert.equal(window.document.body.classList.contains('comments-open'),true);$('tree-toggle').click();$('comments-toggle').click();
 const resizeHandle=$('tree-resize');
 resizeHandle.dispatchEvent(new window.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));
-assert.equal(resizeHandle.getAttribute('aria-valuenow'),'296');
+assert.equal(resizeHandle.getAttribute('aria-valuenow'),'264');
 resizeHandle.dispatchEvent(new window.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
 assert.equal(resizeHandle.getAttribute('aria-valuenow'),'280');
 resizeHandle.dispatchEvent(new window.MouseEvent('pointerdown',{clientX:700,button:0,bubbles:true,cancelable:true}));
-window.dispatchEvent(new window.MouseEvent('pointermove',{clientX:650,bubbles:true}));
+window.dispatchEvent(new window.MouseEvent('pointermove',{clientX:750,bubbles:true}));
 window.dispatchEvent(new window.MouseEvent('pointerup',{bubbles:true}));
-assert.equal(resizeHandle.getAttribute('aria-valuenow'),'330','dragging the left edge left widens the right panel');
+assert.equal(resizeHandle.getAttribute('aria-valuenow'),'330','dragging the left sidebar edge right widens it');
 assert.equal(window.localStorage.getItem('markdown-review:tree-width'),'330');
 assert.equal(window.document.body.classList.contains('resizing-tree'),false);
-function select(node,a,b){const range=window.document.createRange();range.setStart(node,a);range.setEnd(node,b);const s=window.getSelection();s.removeAllRanges();s.addRange(range);$('document').dispatchEvent(new window.Event('pointerup',{bubbles:true}));}
+function select(node,a,b){const range=window.document.createRange();range.setStart(node,a);range.setEnd(node,b);const s=window.getSelection();s.removeAllRanges();s.addRange(range);$('document').dispatchEvent(new window.Event('pointerup',{bubbles:true}));if(!$('selection-action').hidden)$('selection-action').click();}
 assert.equal($('comment').getAttribute('aria-pressed'),'true','Request edits starts enabled');
+const stableStrong=$('document').querySelector('strong'),stableHTML=$('document').innerHTML;
+const fastRange=window.document.createRange();fastRange.selectNodeContents(stableStrong);window.getSelection().removeAllRanges();window.getSelection().addRange(fastRange);
+$('document').dispatchEvent(new window.Event('pointerup',{bubbles:true}));
+assert.equal($('selection-action').hidden,false);assert.equal($('composer').hidden,true,'selection only shows the small action');
+assert.equal($('document').innerHTML,stableHTML);assert.equal($('document').querySelector('strong'),stableStrong,'selection never rebuilds Markdown');assert.equal(window.getSelection().toString(),'same');
+assert.equal($('selection-action').querySelector('kbd').hidden,false,'Preview shows C');
+const c=new window.KeyboardEvent('keydown',{key:'c',bubbles:true,cancelable:true});window.document.dispatchEvent(c);assert.equal(c.defaultPrevented,true);assert.equal($('composer').hidden,false);escape();
+$('code-edit').click();
+const editC=new window.KeyboardEvent('keydown',{key:'c',bubbles:true,cancelable:true});$('document').dispatchEvent(editC);assert.equal(editC.defaultPrevented,false);assert.equal($('composer').hidden,true);
+$('code-edit').click();
+
 select($('document').querySelector('strong').firstChild,0,4);assert.equal($('composer').hidden,false);escape();
 $('comment').click();select($('document').querySelector('strong').firstChild,0,4);assert.equal($('composer').hidden,true,'toggle can disable annotations');
 $('comment').click();select($('document').querySelector('strong').firstChild,0,4);
 assert.equal($('composer').hidden,false);assert.equal($('quote').textContent,'same');assert.match($('location').textContent,/3–3/);
-assert.equal($('document').querySelector('.pending-selection').textContent,'same','selection remains highlighted after focusing input');
-assert.equal(window.document.activeElement,$('document'),'selection keeps focus in the editable document');
+assert.equal($('document').querySelector('.pending-selection'),null,'opening a composer no longer wraps or reparses the selected text');
+assert.equal(window.document.activeElement,$('message'),'clicking Comment focuses the comment input');
 window.document.dispatchEvent(new window.Event('pointerdown',{bubbles:true}));window.document.body.click();
 assert.equal($('composer').hidden,true,'outside click closes unfinished editor');
 assert.equal($('document').querySelector('.pending-selection'),null,'outside click removes temporary highlight');
@@ -55,15 +77,14 @@ select($('document').querySelector('strong').firstChild,0,4);
 enter();assert.equal($('composer').hidden,false,'empty comment stays open');
 $('message').value='Please revise this.';
 $('message').setSelectionRange(6,6);
-$('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',metaKey:true,bubbles:true,cancelable:true}));
-assert.equal($('composer').hidden,false,'Command+Enter inserts a line without saving');
-assert.equal($('message').value,'Please\n revise this.');
-assert.equal($('message').selectionStart,7,'caret follows inserted newline');
+$('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true}));
+assert.equal($('composer').hidden,false,'Shift+Enter inserts a line without saving');
+const newline=new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true});$('message').dispatchEvent(newline);assert.equal(newline.defaultPrevented,false,'Enter uses the native textarea newline');
 $('message').value='Please revise this.';
 $('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true,cancelable:true}));
 assert.equal($('composer').hidden,false,'IME composition does not submit');
-$('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
-assert.equal($('composer').hidden,true,'Enter saves and closes');await flush();
+$('message').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',metaKey:true,bubbles:true,cancelable:true}));
+assert.equal($('composer').hidden,true,'Command+Enter saves and closes');await flush();
 assert.equal(window.contextCalls.length,0);assert.equal(window.chatCalls.length,0,'comments do not send context automatically');assert.equal($('review-batch').hidden,false);assert.equal($('review-count').textContent,'1 File, 1 Annotation');
 window.batchError='File changed: refresh before sending';$('review-send').click();await until(()=>$('review-error').textContent.includes('File changed'));
 assert.equal(window.chatCalls.length,0,'failed preparation does not send');assert.equal($('review-count').textContent,'1 File, 1 Annotation','failed sends retain the queue');window.batchError=null;
@@ -79,8 +100,17 @@ assert.equal($('document').querySelector('.pending-selection'),null);
 assert.equal($('document').querySelector('mark').textContent,'same');
 const records=()=>JSON.parse(window.localStorage.getItem(Object.keys(window.localStorage).find(key=>key.startsWith('markdown-review:v1:'))));
 assert.equal(records()[0].startOffset,fixture.indexOf('same'));
+$('comment').click();
+$('comments-toggle').click();
+assert.equal($('review-batch').hidden,false,'saved comments remain visible with Request edits disabled');
+assert.match($('review-list').textContent,/Please revise this/);
+$('review-batch').getBoundingClientRect=()=>({left:684,right:994,top:54,bottom:750,width:310,height:696});
+let noteScroll=null;window.HTMLElement.prototype.scrollIntoView=function(options){noteScroll={text:this.textContent,options};};
+$('review-list').querySelector('.review-row').click();await flush();assert.equal($('composer').hidden,false,'clicking a queued comment opens its note');assert.equal(noteScroll.options.block,'center');assert.match(noteScroll.text,/same/);
+assert.ok(parseFloat($('composer').style.left)>=12,'composer remains inside the document');
+escape();$('comments-toggle').click();$('comment').click();
 $('view-toggle').click();assert.equal($('document').querySelector('.cm-review-note').textContent,'same');
-$('document').querySelector('.annotation-icon').click();assert.equal($('message').value,'Please revise this.');
+window.getSelection().removeAllRanges();$('document').querySelector('[data-annotation]').click();assert.equal($('message').value,'Please revise this.');
 assert.equal($('save'),null);assert.equal($('close'),null,'no save or cancel buttons');
 escape();$('view-toggle').click();
 const tail=$('document').querySelector('p').lastChild;
@@ -88,28 +118,35 @@ select(tail,tail.textContent.indexOf('same'),tail.textContent.indexOf('same')+4)
 $('message').value='Second occurrence';enter();await flush();
 assert.equal(window.chatCalls.length,1);assert.equal($('review-count').textContent,'1 File, 2 Annotations');
 assert.equal(records()[1].startOffset,fixture.indexOf('same',fixture.indexOf('same')+4));
-$('document').querySelectorAll('.annotation-icon')[1].click();$('delete').click();await flush();
+window.getSelection().removeAllRanges();$('document').querySelectorAll('[data-annotation]')[1].click();$('delete').click();await flush();
 assert.equal(window.chatCalls.length,1,'deleting a queued note does not send a message');
-$('document').querySelector('.annotation-icon').click();
+window.getSelection().removeAllRanges();$('document').querySelector('[data-annotation]').click();
 $('kind-explanation').click();assert.equal(window.document.activeElement,$('kind-explanation'),'length does not appear focused by default');assert.equal($('comment-input').hidden,true);assert.equal($('explanation-options').hidden,false);
 assert.equal($('composer').querySelector('select'),null,'length uses styled controls');
 assert.equal($('length-options').querySelectorAll('[aria-checked="true"]').length,0,'no explanation length is selected by default');
 assert.equal(window.chatCalls.length,1,'opening explanation controls does not start a chat');
 $('detail-short').focus();$('length-options').dispatchEvent(new window.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
 assert.equal($('length-options').querySelectorAll('[aria-checked="true"]').length,0,'keyboard focus does not implicitly choose a length');
-$('composer').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+$('composer').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',metaKey:true,bubbles:true,cancelable:true}));
 assert.equal($('composer').hidden,false,'no dialog-level Enter action for explanations');
-const explanationIcon=()=>[...$('document').querySelectorAll('.annotation-icon')].find(icon=>icon.textContent==='?');
-$('detail-long').click();await flush();
+const explanationIcon=()=>{window.getSelection().removeAllRanges();return $('document').querySelector('[data-note-kind=explanation]');};
+$('detail-long').click();$('explanation-prompt').value='Explain the reasoning and edge cases';
+assert.equal($('explain-selection'),null);
+for(const extra of [{},{metaKey:true,isComposing:true},{metaKey:true,keyCode:229}]){const count=window.explanationRequests || 0;const event=new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...extra});$('explanation-prompt').dispatchEvent(event);assert.equal(event.defaultPrevented,false);assert.equal(window.explanationRequests || 0,count);}
+$('explanation-prompt').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',metaKey:true,bubbles:true,cancelable:true}));await flush();
 assert.equal($('composer').hidden,false);assert.equal($('explanation-box').hidden,false);assert.match($('explanation-status').textContent,/Waiting.*may take a few seconds/);assert.equal(records().find(note=>note.kind==='explanation').kind,'explanation');assert.equal(records().find(note=>note.kind==='explanation').message,'');assert.equal(records().find(note=>note.kind==='explanation').detail,'long');
 assert.equal(window.chatCalls.length,1,'explanations never navigate or send to a chat');
 assert.equal(records().length,2,'a comment and explanation coexist at the same selection');
 assert.equal(records().find(note=>note.kind==='comment').message,'Please revise this.');
-assert.equal($('review-count').textContent,'1 File, 1 Annotation','explanations do not replace or enter the comment queue');
+assert.equal($('review-count').textContent,'1 File, 2 Annotations','comments and explanations share the sidebar');
+$('filter-comments').click();assert.equal($('review-list').children.length,1);assert.equal($('filter-explanations').getAttribute('aria-pressed'),'false');
+$('filter-explanations').click();assert.equal($('review-list').children.length,1);assert.match($('review-list').textContent,/Explanation/);assert.equal($('filter-comments').getAttribute('aria-pressed'),'false');
+$('filter-explanations').click();assert.equal($('review-list').children.length,2);explanationIcon().click();
+
 $('kind-comment').click();assert.equal($('message').value,'Please revise this.');assert.equal($('explanation-box').hidden,true);
 $('kind-explanation').click();assert.equal($('explanation-box').hidden,false);assert.equal(records().length,2);
 
-assert.equal(window.lastExplanation.annotation.detail,'long');
+assert.equal(window.lastExplanation.annotation.detail,'long');assert.equal(window.lastExplanation.annotation.explanationPrompt,'Explain the reasoning and edge cases');
 assert.equal(records().find(note=>note.kind==='explanation').explanationRequestId,'11111111-1111-4111-8111-000000000001');
 // A pending response cannot overwrite another selection after dismissal.
 let releaseReply;window.replyGate=new Promise(resolve=>releaseReply=resolve);
@@ -132,14 +169,14 @@ window.replyGate=null;releaseReply();await flush();await flush();
 assert.equal($('explanation-box').hidden,true);assert.equal($('explanation-answer').textContent,'');
 escape();explanationIcon().click();await flush();await flush();
 assertMarkdownReply();
-assert.match($('explanation-answer').textContent,/<script>unsafe\(\)<\/script>/);
+assert.doesNotMatch($('explanation-answer').textContent,/unsafe\(\)/);
 assert.equal(records().find(note=>note.kind==='explanation').explanationAnswer,window.explanationReply.answer);
-await window.testApp.listeners.toolinput(input);assert.equal($('document').querySelectorAll('.annotation-icon').length,2);
+await window.testApp.listeners.toolinput(input);assert.equal($('document').querySelectorAll('[data-annotation]').length,1);
 explanationIcon().click();assertMarkdownReply();escape();
 explanationIcon().click();
-window.replyError='Reply temporarily unavailable';$('detail-short').click();await flush();await flush();
+window.replyError='Reply temporarily unavailable';$('detail-short').click();$('explanation-prompt').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',metaKey:true,bubbles:true,cancelable:true}));await flush();await flush();
 assert.equal(window.chatCalls.length,1);assert.equal($('explanation-answer').textContent,'','a new request clears the previous answer');
-assert.match($('explanation-status').textContent,/Reply temporarily unavailable/);
+assert.match($('explanation-status').textContent,/Reply temporarily unavailable/);assert.equal($('explanation-status').classList.contains('is-error'),true);assert.equal($('explanation-status').getAttribute('role'),'alert');
 assert.notEqual(records().find(note=>note.kind==='explanation').explanationRequestId,'11111111-1111-4111-8111-000000000001');
 escape();window.replyError=null;explanationIcon().click();await flush();await flush();
 assertMarkdownReply();escape();
@@ -163,7 +200,7 @@ assert.equal(tableSource.slice(cellSelection.startOffset,cellSelection.endOffset
 const entity=container.querySelectorAll('td')[1].firstChild;range.setStart(entity,2);range.setEnd(entity,3);
 const cellEntity=tableMap.selection(range,'&');assert.equal(tableSource.slice(cellEntity.startOffset,cellEntity.endOffset),'&amp;');
 const marked=renderMarkdown(container,tableSource,'rendered',[{...cellSelection,id:'cell-note',kind:'comment',message:'Revise'}]);
-assert.equal(container.querySelector('td mark').textContent,'Alpha');assert.ok(container.querySelector('td .annotation-icon'));
+assert.equal(container.querySelector('td mark').textContent,'Alpha');assert.equal(container.querySelector('td .annotation-icon'),null);assert.equal(container.querySelector('td mark').getAttribute('role'),'button');
 renderMarkdown(container,tableSource,'source');assert.equal(container.querySelector('.source').textContent,tableSource);
 window.resources={async read(){return {contents:[{text:fixture+'\nchanged'}]};}};
 await window.testApp.listeners.toolinput(input);assert.equal($('document').querySelectorAll('mark').length,0);
@@ -197,7 +234,7 @@ select($('document').querySelector('h1').firstChild,0,7);$('message').value='Pro
 assert.match($('review-list').textContent,/live\.md/);
 assert.equal($('project-name'),null,'tree does not repeat the root folder name');
 assert.equal($('project-close'),null,'tree has no close button');
-assert.equal(window.document.querySelector('.toolbar').lastElementChild,$('tree-toggle'),'panel toggle is the last toolbar control');
+assert.equal(window.document.querySelector('.toolbar').firstElementChild,$('tree-toggle'),'tree toggle follows left sidebar');
 // Workspace trees list names only, refresh on reopen/context/focus, and never upload folders.
 assert.equal($('project-picker'),null);assert.equal(window.document.querySelector('[webkitdirectory]'),null);
 const readsBefore=window.projectReads;
@@ -242,28 +279,29 @@ assert.equal(window.projectRequest.root,'/chosen/folder');assert.equal($('filena
 assert.equal($('path-folders').querySelector('button').textContent,'docs');
 $('tree-toggle').click();$('project-filter').value='live';
 $('path-folders').querySelector('[data-breadcrumb-folder="docs"]').click();await flush();await flush();
-assert.equal($('project-drawer').hidden,false);assert.equal($('project-filter').value,'');
-assert.equal($('project-tree').querySelector('details').open,true);
-assert.equal($('project-tree').querySelector('[data-breadcrumb-active]').textContent,'docs');
+assert.equal($('path-popover').hidden,false);assert.equal($('project-filter').value,'live');
+assert.match($('path-popover').textContent,/nested.md/);
+if($('project-drawer').hidden)$('tree-toggle').click();
+$('project-filter').value='';$('project-filter').dispatchEvent(new window.Event('input'));
 $('project-tree').querySelector('[data-project-path="live.md"]').click();await flush();await flush();
 assert.equal($('filename').textContent,'live.md');assert.equal($('path-folders').childElementCount,0);
 window.dispatchEvent(new window.Event('focus'));await flush();
 assert.equal(window.lastListArgs.folderPath,'/chosen/folder','focus preserves this viewer’s explicit connection');
 // Editing and commenting work together; autosave preserves focus and serializes writes.
 window.codeProject=true;window.projectText='const value = 1;\n';window.projectEtag='10';window.dispatchEvent(new window.Event('focus'));await flush();
-$('project-tree').querySelector('[data-project-path="code.js"]').click();await flush();await flush();
+$('project-tree').querySelector('[data-project-path="code.js"]').click();await until(()=>$('filename').textContent==='code.js' && $('view-toggle').hidden);
 assert.equal($('project-drawer').hidden,false,'opening a file keeps the tree open');
-assert.equal($('view-toggle').hidden,true);assert.equal($('code-edit').textContent,'Edit');assert.equal($('code-edit').getAttribute('aria-pressed'),'true');assert.equal($('code-save'),null);assert.equal($('code-discard'),null);
+assert.equal($('mode-cycle').disabled,true);assert.equal($('view-toggle').hidden,true);assert.equal($('code-edit').textContent,'Edit');assert.equal($('code-edit').getAttribute('aria-pressed'),'true');assert.equal($('code-save'),null);assert.equal($('code-discard'),null);
 let code=CMView.findFromDOM($('document').querySelector('.cm-editor'));
 assert.equal(code.state.readOnly,false);assert.equal(code.state.doc.toString(),'const value = 1;\n');
 $('code-edit').click();code=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.equal(code.state.readOnly,true);assert.equal($('code-edit').getAttribute('aria-pressed'),'false');
 $('code-edit').click();code=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.equal(code.state.readOnly,false);
 
 await flush();await flush();code.dispatch({selection:{anchor:0,head:5}});
-code.contentDOM.dispatchEvent(new window.Event('pointerup',{bubbles:true}));await Promise.resolve();$('document').click();
+code.contentDOM.dispatchEvent(new window.Event('pointerup',{bubbles:true}));await Promise.resolve();$('selection-action').click();
 assert.equal($('composer').hidden,false,'editable code selection opens the composer');
 assert.equal(code.state.selection.main.to,5,'the real editor selection is retained');
-assert.equal(code.hasFocus,true,'opening a comment window does not take code editor focus');
+assert.equal(window.document.activeElement,$('message'),'explicit Comment action focuses the input');
 $('message').value='Use a named constant';enter();await flush();await flush();
 assert.match($('review-list').textContent,/Use a named constant/);
 assert.ok(window.reviewDocument.checkpointAnnotationId,'submitting a comment records an internal checkpoint');
@@ -284,12 +322,13 @@ assert.equal(window.projectText,'const value = 4;\n','typing during a save is wr
 assert.equal(window.lastSave.expectedEtag,'12','each save uses the preceding write version');
 window.saveConflict=true;code.dispatch({changes:{from:14,to:15,insert:'5'}});await new Promise(r=>setTimeout(r,550));
 assert.equal($('code-error').hidden,false);assert.match($('code-error').textContent,/changed on disk/);
-$('project-tree').querySelector('[data-project-path="docs/nested.md"]').click();await flush();
-assert.equal($('filename').textContent,'code.js','a conflict keeps the draft open rather than losing it');
-assert.equal(code.state.doc.toString(),'const value = 5;\n');assert.equal(window.projectText,'const value = 4;\n');
-window.saveConflict=false;code.dispatch({changes:{from:14,to:15,insert:'6'}});
-$('project-tree').querySelector('[data-project-path="docs/nested.md"]').click();await flush();await flush();await flush();
-await until(()=>$('filename').textContent==='nested.md');assert.equal(window.lastSave.text,'const value = 6;\n','switching files flushes pending autosave');
+$('project-tree').querySelector('[data-project-path="docs/nested.md"]').click();await until(()=>$('filename').textContent==='nested.md');
+assert.ok([...Array(window.localStorage.length)].map((_,i)=>window.localStorage.key(i)).some(key=>key.startsWith('markatlas:unsaved:') && JSON.parse(window.localStorage.getItem(key)).text==='const value = 5;\n'),'failed save retains recoverable draft while switching');
+window.saveConflict=false;
+$('file-back').click();await until(()=>$('filename').textContent==='code.js');
+code=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.equal(code.state.doc.toString(),'const value = 5;\n','back restores the draft');
+code.dispatch({changes:{from:14,to:15,insert:'6'}});
+$('project-tree').querySelector('[data-project-path="docs/nested.md"]').click();await until(()=>$('filename').textContent==='nested.md');assert.equal(window.lastSave.text,'const value = 6;\n','switching files flushes pending autosave');
 // Markdown is editable in rendered and source modes; notes follow text changes.
 window.codeProject=false;window.projectText='# Title\n\nA quoted passage.\n\nEnd.';window.projectEtag='20';window.dispatchEvent(new window.Event('focus'));await flush();
 $('project-tree').querySelector('[data-project-path="live.md"]').click();await until(()=>$('filename').textContent==='live.md' && $('document').querySelector('h1')?.textContent==='Title');
@@ -297,38 +336,18 @@ select($('document').querySelector('p').firstChild,2,8);$('message').value='Clar
 assert.match($('review-list').textContent,/Clarify this passage/);
 await until(()=>window.reviewDocument?.sourceName==='live.md' && window.reviewDocument.annotations.length>0);
 const annotationId=window.reviewDocument.annotations.at(-1).id;
-$('code-edit').click();assert.equal($('document').contentEditable,'false');$('code-edit').click();assert.equal($('document').contentEditable,'true');
-const heading=$('document').querySelector('h1').firstChild;const caret=window.document.createRange();caret.setStart(heading,0);caret.collapse(true);window.getSelection().removeAllRanges();window.getSelection().addRange(caret);
-$('document').dispatchEvent(new window.InputEvent('beforeinput',{inputType:'insertText',data:'Intro\n\n',bubbles:true,cancelable:true}));await flush();await flush();
-assert.match($('document').textContent,/Intro/);
-// Target ranges omit trailing spaces in rendered Markdown. Keep the source caret exact.
-for(const char of ' with spaces'){
- const event=new window.InputEvent('beforeinput',{inputType:'insertText',data:char,bubbles:true,cancelable:true});
- const selection=window.getSelection();const range=selection.getRangeAt(0).cloneRange();Object.defineProperty(event,'getTargetRanges',{value:()=>[range]});
- $('document').dispatchEvent(event);
-}
-
-$('view-toggle').click();let md=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.equal(md.state.readOnly,false);
-assert.equal(md.state.doc.toString().startsWith('# Intro\n\n with spacesTitle'),true);
-historyKey('z');md=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.ok(md.state.doc.toString().startsWith('# Intro\n\nTitle'),'undo groups the typing burst across preview/source switches');
-historyKey('z',true);md=CMView.findFromDOM($('document').querySelector('.cm-editor'));
-
+$('code-edit').click();
+let md=CMView.findFromDOM($('document').querySelector('.cm-editor'));
+assert.equal(md.state.readOnly,false);assert.ok($('document').querySelector('.cm-markdown-preview'));
+md.dispatch({changes:{from:0,insert:'Intro\n\n\n'}});await flush();
+assert.equal(md.state.doc.toString().startsWith('Intro\n\n\n# Title'),true,'live editor preserves repeated blank lines');
 const quoteOffset=md.state.doc.toString().indexOf('quoted');md.dispatch({changes:{from:quoteOffset,to:quoteOffset+6,insert:'revised'}});await flush();await flush();
-$('view-toggle').click();assert.match($('document').textContent,/revised/);
+$('code-edit').click();assert.match($('document').textContent,/revised/);
 const editedMark=$('document').querySelector('mark');assert.equal(editedMark.textContent,'revised');
-editedMark.parentElement.querySelector('.annotation-icon').click();assert.match($('location').textContent,/5–5/);escape();
-await new Promise(r=>setTimeout(r,600));await flush();await flush();
-const latest=window.reviewDocument.annotations.find(n=>n.id===annotationId);assert.equal(latest.anchorStatus,'edited');assert.equal(latest.startLine,5);
+await new Promise(r=>setTimeout(r,600));
+const latest=window.reviewDocument.annotations.find(n=>n.id===annotationId);assert.equal(latest.anchorStatus,'edited');assert.equal(latest.startLine,6);
 assert.equal(window.reviewDocument.text,window.projectText);assert.equal(window.reviewDocument.baseText,window.projectText);
 $('project-tree').querySelector('[data-project-path="live.md"]').click();await flush();await flush();assert.equal($('document').querySelector('mark').textContent,'revised','saved edits reopen with tracked comments');
-// Selecting in edit mode leaves the native selection ready for deletion.
-const selectedMark=$('document').querySelector('mark');select(selectedMark.firstChild,0,selectedMark.firstChild.length);
-assert.equal(window.document.activeElement,$('document'));assert.equal(window.getSelection().toString(),'revised');
-$('document').dispatchEvent(new window.InputEvent('beforeinput',{inputType:'deleteContentBackward',bubbles:true,cancelable:true}));
-assert.equal($('composer').hidden,true,'editing dismisses the unused comment window');assert.ok(!$('document').textContent.includes('revised'));
-historyKey('z');assert.match($('document').textContent,/revised/,'undo restores a deleted selection');
-historyKey('z',true);assert.ok(!$('document').textContent.includes('revised'),'redo removes the selection again');
-historyKey('z');
 // Unknown extensions use the editor; image resources never enter the HTML document.
 window.resources={async read(){return {contents:[{text:'Unknown format, plain text.'}]};}};
 await window.testApp.listeners.toolinput({arguments:{file:{name:'notes.custom',resourceUri:'file:///notes.custom'}}});
@@ -351,13 +370,12 @@ for(const extension of ['tex','sty','cls']){
  const command=colored.find(span=>span.textContent==='\\documentclass'),comment=colored.find(span=>span.textContent.startsWith('% A LaTeX'));
  assert.ok(command?.className,'LaTeX commands receive syntax highlighting');assert.ok(comment?.className,'comments receive syntax highlighting');
  assert.notEqual(command.className,comment.className,'commands and comments use different colors');
- $('code-edit').click();assert.equal(CMView.findFromDOM($('document').querySelector('.cm-editor')).state.readOnly,true);
+ assert.equal(CMView.findFromDOM($('document').querySelector('.cm-editor')).state.readOnly,false);
  assert.ok(Array.from($('document').querySelectorAll('.cm-line span')).some(span=>span.textContent==='\\documentclass' && span.className));
- $('code-edit').click();
 }
 const latexEditor=CMView.findFromDOM($('document').querySelector('.cm-editor'));
 latexEditor.dispatch({selection:{anchor:latexSource.indexOf('Color sample'),head:latexSource.indexOf('Color sample')+12}});
-latexEditor.contentDOM.dispatchEvent(new window.Event('pointerup',{bubbles:true}));await Promise.resolve();
+latexEditor.contentDOM.dispatchEvent(new window.Event('pointerup',{bubbles:true}));await Promise.resolve();if(!$('selection-action').hidden)$('selection-action').click();
 assert.equal($('composer').hidden,false);$('message').value='Clarify this TeX heading';enter();await flush();await flush();
 assert.match($('review-list').textContent,/Clarify this TeX heading/);
 latexEditor.dispatch({changes:{from:latexSource.length,insert:'\n% Added comment'}});await flush();
@@ -393,6 +411,7 @@ window.projectSnapshot=null;window.projectFileName='settings.custom';window.code
 window.dispatchEvent(new window.Event('focus'));await flush();await flush();
 $('project-tree').querySelector('[data-project-path="settings.custom"]').click();await until(()=>$('filename').textContent==='settings.custom');
 assert.equal($('code-edit').hidden,false);assert.equal($('comment').disabled,false);
+$('mode-cycle').click();$('mode-cycle').click();
 const unknownView=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.equal(unknownView.state.readOnly,false);
 unknownView.dispatch({changes:{from:10,to:14,insert:'false'}});await new Promise(resolve=>setTimeout(resolve,600));await flush();
 assert.equal(window.projectText,'setting = false');
@@ -406,11 +425,11 @@ wordFrame.contentWindow.Range.prototype.getClientRects=()=>[{left:20,right:160,t
 assert.equal($('pdf-tools').hidden,false);assert.equal($('pdf-page-float').textContent,'1/2');
 $('pdf-zoom-in').click();assert.equal($('pdf-zoom-level').textContent,'125%');$('pdf-zoom-level').click();assert.equal($('pdf-zoom-level').textContent,'100%');
 const paragraph=Array.from(wordFrame.contentDocument.querySelectorAll('p')).find(p=>p.textContent.startsWith('Review this'));
-const wordRange=wordFrame.contentDocument.createRange();wordRange.setStart(paragraph.firstChild.firstChild,0);wordRange.setEnd(paragraph.lastChild.firstChild,paragraph.lastChild.firstChild.length);wordFrame.contentWindow.getSelection().addRange(wordRange);paragraph.dispatchEvent(new wordFrame.contentWindow.Event('pointerup',{bubbles:true}));
+const wordRange=wordFrame.contentDocument.createRange();wordRange.setStart(paragraph.firstChild.firstChild,0);wordRange.setEnd(paragraph.lastChild.firstChild,paragraph.lastChild.firstChild.length);wordFrame.contentWindow.getSelection().addRange(wordRange);paragraph.dispatchEvent(new wordFrame.contentWindow.Event('pointerup',{bubbles:true}));if(!$('selection-action').hidden)$('selection-action').click();
 assert.equal($('composer').hidden,false);$('message').value='Review this Word passage locally';enter();await flush();await flush();
 assert.match($('review-list').textContent,/Review this Word passage locally/);assert.ok(window.reviewDocument.annotations.at(-1).word);
-wordFrame.contentDocument.querySelector('.word-review-note').click();assert.equal($('message').value,'Review this Word passage locally');
-$('kind-explanation').click();$('detail-short').click();await flush();await flush();await until(()=>$('explanation-answer').textContent.includes('bold'));escape();
+wordFrame.contentDocument.querySelector('.word-review-highlight[data-annotation]').click();assert.equal($('message').value,'Review this Word passage locally');
+$('kind-explanation').click();$('detail-short').click();$('explanation-prompt').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',metaKey:true,bubbles:true,cancelable:true}));await flush();await flush();await until(()=>$('explanation-answer').textContent.includes('bold'));escape();
 await window.testApp.listeners.toolinput({arguments:{file:{name:'review.docx',resourceUri:'file:///review.docx'}}});assert.equal(window.reviewDocument.annotations.length,2,'Word comments survive adding an explanation at the same point');
 const wordReviewRow=[...$('review-list').querySelectorAll('.review-row')].find(row=>row.textContent.includes('Review this Word passage locally'));wordReviewRow.querySelector('.review-remove').click();await flush();await flush();assert.equal(window.reviewDocument.annotations.length,1);assert.equal(window.reviewDocument.annotations[0].kind,'explanation','deleting a comment preserves its explanation');
 window.resources={async read(){return {contents:[{blob:Buffer.from('broken Word data').toString('base64')}]};}};
@@ -433,4 +452,30 @@ $('project-tree').querySelector('[data-project-path="budget.xlsx"]').click();awa
 assert.equal($('document').innerHTML,previousDocument,'failed native handoff preserves the current preview');
 window.nativeFiles=undefined;$('project-tree').querySelector('[data-project-path="budget.xlsx"]').click();await flush();await flush();
 assert.match($('project-status').textContent,/browser preview cannot open/);
+window.projectSnapshot=null;window.projectFileName='review.html';window.projectText='<h1>HTML review</h1>';window.projectEtag='html-one';window.dispatchEvent(new window.Event('focus'));await until(()=>$('project-tree').querySelector('[data-project-path="review.html"]'));
+const htmlButton=$('project-tree').querySelector('[data-project-path="review.html"]');htmlButton.dispatchEvent(new window.MouseEvent('click',{bubbles:true,detail:1}));htmlButton.dispatchEvent(new window.MouseEvent('click',{bubbles:true,detail:2}));htmlButton.querySelector('.file-label').dispatchEvent(new window.MouseEvent('dblclick',{bubbles:true,detail:2}));assert.ok($('project-tree').querySelector('.tree-rename-input'),'double click renames instead of opening');$('project-tree').querySelector('.tree-rename-input').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));htmlButton.click();await until(()=>$('filename').textContent==='review.html');
+assert.ok($('project-tree').querySelector('[data-project-path="review.html"]'),'HTML remains in tree after double click');const htmlReads=window.projectReads;$('project-tree').querySelector('[data-project-path="review.html"]').click();await flush();assert.equal(window.projectReads,htmlReads,'repeat click does not reopen the active HTML');
+// Metadata-only changes rebase safely; a real disk edit remains protected across navigation.
+assert.ok($('html-frame'),'HTML defaults to an embedded webpage');
+$('mode-cycle').click();
+let htmlEditor=CMView.findFromDOM($('document').querySelector('.cm-editor'));
+if($('comment').getAttribute('aria-pressed')==='false')$('comment').click();
+htmlEditor.dispatch({selection:{anchor:4,head:8}});htmlEditor.contentDOM.dispatchEvent(new window.Event('pointerup',{bubbles:true}));await until(()=>!$('selection-action').hidden);$('selection-action').click();$('message').value='HTML revisit note';enter();await until(()=>$('review-list').textContent.includes('HTML revisit note'));
+$('project-tree').querySelector('[data-project-path="docs/nested.md"]').click();await until(()=>$('filename').textContent==='nested.md');
+$('file-back').click();await until(()=>$('filename').textContent==='review.html');
+ const restoredHtmlRow=[...$('review-list').querySelectorAll('.review-row')].find(row=>row.textContent.includes('HTML revisit note'));assert.match(restoredHtmlRow.querySelector('.review-location').textContent,/^review.html/,'restored comments use the opened file path, never the previous file');
+$('mode-cycle').click();
+window.strictEtag=true;window.projectEtag='200';
+htmlEditor=CMView.findFromDOM($('document').querySelector('.cm-editor'));
+htmlEditor.dispatch({changes:{from:4,to:4,insert:'local '}});await new Promise(r=>setTimeout(r,700));await flush();
+assert.equal(window.projectText,'<h1>local HTML review</h1>');assert.equal($('code-error').hidden,true);
+window.projectText='<h1>External content</h1>';window.projectEtag='202';
+htmlEditor.dispatch({changes:{from:4,to:4,insert:'draft '}});await new Promise(r=>setTimeout(r,700));await flush();
+assert.equal($('code-error').hidden,false);assert.equal(window.projectText,'<h1>External content</h1>');
+for(let i=0;i<2;i++){
+ $('project-tree').querySelector('[data-project-path="docs/nested.md"]').click();await until(()=>$('filename').textContent==='nested.md');
+ $('file-back').click();await until(()=>$('filename').textContent==='review.html');await new Promise(r=>setTimeout(r,600));
+ $('mode-cycle').click();assert.match(CMView.findFromDOM($('document').querySelector('.cm-editor')).state.doc.toString(),/draft local/);
+ assert.equal(window.projectText,'<h1>External content</h1>','reopening a conflict never overwrites external edits');
+}
 console.log('Broad file, image, read-only Word rendering and comments, reply display, refresh, and existing viewer checks passed');window.close();

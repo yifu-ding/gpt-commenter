@@ -229,3 +229,8 @@ plugin/node_modules/
 .DS_Store
 /releases/
 /submission/tmp/
+
+# Local installed PDF and TeX runtimes (not source code)
+/plugin/runtime/
+
+.markatlas/

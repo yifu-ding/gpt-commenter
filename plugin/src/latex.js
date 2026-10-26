@@ -1,3 +1,5 @@
+import {gunzipSync} from 'node:zlib';
+import {pdfNavigation} from './pdf-navigation.js';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {readFile,readdir,stat} from 'node:fs/promises';
@@ -6,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 const execute=promisify(execFile),hash=s=>createHash('sha256').update(s).digest('hex');
-const hidden=new Set(['.git','node_modules','.codex','.agents','.aws','.gpt-commenter-build']);
+const hidden=new Set(['.markatlas','.git','node_modules','.codex','.agents','.aws','.gpt-commenter-build']);
 const decode=s=>s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi,(_,e)=>e[0]==='#'?String.fromCodePoint(e[1]?.toLowerCase()==='x'?parseInt(e.slice(2),16):Number(e.slice(1))):({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"})[e]);
 const attrs=s=>Object.fromEntries([...s.matchAll(/(\w+)="([^"]*)"/g)].map(m=>[m[1],m[2]]));
 export function parsePdfText(xml){
@@ -31,7 +33,7 @@ async function executable(name){
     const bundled=fileURLToPath(new URL(`../runtime/pdf/bin/${name}`,import.meta.url));
     try{if((await stat(bundled)).isFile())return bundled;}catch{}
   }
-  for(const path of [...(process.env.PATH || '').split(':'),'/Library/TeX/texbin','/opt/homebrew/bin','/usr/local/bin','/usr/bin']){
+  for(const path of [fileURLToPath(new URL('../runtime/tex/bin/universal-darwin/',import.meta.url)),...(process.env.PATH || '').split(':'),'/Library/TeX/texbin','/opt/homebrew/bin','/usr/local/bin','/usr/bin']){
     const candidate=join(path,name);try{if((await stat(candidate)).isFile())return candidate;}catch{}
   }
   throw Error(`${name} is not installed. PDF display requires Poppler (pdftotext, pdftocairo and pdftoppm); precise source mapping uses the user's installed SyncTeX.`);
@@ -40,7 +42,7 @@ async function run(name,args,options={}){
   try{
     const command=await executable(name),bundled=command===fileURLToPath(new URL(`../runtime/pdf/bin/${name}`,import.meta.url));
     const pdfRoot=fileURLToPath(new URL('../runtime/pdf/',import.meta.url));
-    return await execute(command,args,{timeout:120000,maxBuffer:24*1024*1024,...(bundled?{
+    return await execute(command,args,{timeout:120000,maxBuffer:24*1024*1024,env:{...process.env,PATH:fileURLToPath(new URL('../runtime/tex/bin/universal-darwin/',import.meta.url))+':'+(process.env.PATH || '')},...(bundled?{
       cwd:pdfRoot,env:{...process.env,FONTCONFIG_FILE:join(pdfRoot,'fonts.conf'),XDG_CACHE_HOME:join(process.env.PLUGIN_DATA || tmpdir(),'markatlas-pdf-cache')}
     }:{}),...options});
   }
@@ -93,7 +95,8 @@ export function latexService(workspace){
     const {stdout}=await run('pdftotext',['-bbox-layout','-enc','UTF-8',target,'-']);
     const after=await stat(target);if(`${after.size}:${after.mtimeMs}:${after.ctimeMs}`!==etag)throw Error('PDF is changing. Waiting for the external build to finish.');
     const parsed=parsePdfText(stdout);
-    const result={...parsed,path,root,sourcePath:target,main:main?relative(root,main):null,fingerprint:hash(bytes),etag};
+    let navigation={links:{},outline:[]};try{navigation=await pdfNavigation(bytes);}catch(error){navigation.error=error.message;}
+    const result={...parsed,navigation,path,root,sourcePath:target,main:main?relative(root,main):null,fingerprint:hash(bytes),etag};
     if(cache.size>8)cache.clear();cache.set(key,result);return result;
   }
   async function page(root,path,number,fingerprint,format='png'){
@@ -138,5 +141,19 @@ export function latexService(workspace){
     const raw=found.raw ?? await readFile(await workspace.resolve(root,found.path),'utf8');
     return {status:'located',main:relative(root,main),path:found.path,sourcePath:join(root,found.path),line:found.line,endLine:found.endLine || found.line,method:found.method,sourceHash:hash(raw),context:raw.split('\n').slice(Math.max(0,found.line-4),found.line+5).join('\n').slice(0,4000)};
   }
-  return {read,page,locate};
+  async function sources(root,path){const pdf=await read(root,path);return latexSourceFiles(workspace,root,path,pdf.main);}
+  return {read,page,locate,sources};
 }
+
+export async function latexSourceFiles(workspace,root,path,mainPath){
+    if(!mainPath)return [];
+    const result=new Set([mainPath]),target=await workspace.resolve(root,path),main=await workspace.resolve(root,mainPath);
+    for(const suffix of ['.synctex.gz','.synctex']){
+      let raw;try{const file=await workspace.resolve(root,relative(root,target.replace(/\.pdf$/i,suffix))),bytes=await readFile(file);raw=suffix.endsWith('.gz')?gunzipSync(bytes,{maxOutputLength:32*1024*1024}).toString('utf8'):bytes.toString('utf8');}catch(error){if(error.code==='ENOENT')continue;throw error;}
+      for(const match of raw.matchAll(/^Input:\d+:(.+)$/gm)){
+        for(const base of [dirname(main),dirname(target),root])try{const source=await workspace.resolve(root,relative(root,resolve(base,match[1].trim())));if(/\.(tex|sty|cls|bib|ltx)$/i.test(source))result.add(relative(root,source));break;}catch{}
+      }
+      break;
+    }
+    return [...result];
+  }

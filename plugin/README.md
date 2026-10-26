@@ -112,3 +112,21 @@ This creates `releases/markatlas-VERSION-macos-arm64.zip` and its SHA-256 checks
 This package supports macOS arm64 only. Poppler is included in this desktop build; explanations need host sampling or a signed-in Codex CLI. It is a development/distribution build, not a completed public submission. Publisher verification and local-MCP submission access, listing URLs, PNG icons, review materials, and portal checks are still required. When changing the bundled Node version, include that version's official license under `plugin/licenses/node-vVERSION.txt` before packaging.
 
 When connecting a workspace, MarkAtlas automatically opens a README directly inside its root. Matching ignores case and prefers README.md, README.markdown, README, README.txt, then README.rst. A folder without a root README keeps the empty file prompt; nested READMEs are not chosen automatically. Routine tree refreshes preserve the current file.
+
+### Plugin settings
+
+The host plugin Settings page provides default file-tree position (left/right, default left), Markdown/PDF outline position (left/right, default left), and Show Git changes (enabled by default). Position changes apply to open viewers; the viewer context menus can temporarily override positions until the next opening or a changed default.
+
+Theme color defaults to `host`, using the host-provided semantic accent colors. MarkAtlas also provides these explicit light/dark presets: blue, purple, pink, red, orange, yellow, green, teal, and gray. These are MarkAtlas presets, not a claimed enumeration of every host color.
+
+**Clear Recently opened…** opens a confirmation panel. Cancel leaves history unchanged. Confirm invalidates only the file-tree Recently opened list; files, annotations, drafts, other caches, sorting and layout preferences are preserved. Open viewers check settings every three seconds while visible and on focus; closed viewers apply the history clear when reopened. Opening a project afterward starts new history.
+
+### Preview changes and review patches
+
+Select **Preview changes** next to **Send** to ask the assistant to propose changes without writing source files. The assistant uses `create_review_patch` with the exact current source and proposed text; binary files require an editable text source first. Each source folder stores proposals in `.markatlas/patches/` as a JSON record and a unified `.patch` file. Records retain the original source, proposed content, context, comments and revisions.
+
+**Review patches** appears for files with pending proposals. Multiple proposals open a selector. The document pane shows red deletions and green additions; select diff text to include it in a comment, save comments, or send them for another patch revision. **Edit proposed content** changes only the cached proposal. **Apply patches** writes the selected proposal after checking that both the source and patch revision are unchanged. A stale proposal is rejected instead of overwriting newer edits. Applied records remain in the cache but disappear from the pending list.
+
+For PDFs with matched LaTeX source, the pending list includes the main source and project-local input files listed by the adjacent `.synctex` or `.synctex.gz` file. Without that mapping, only the confirmed main source is included. Applying a LaTeX patch does not automatically compile or replace the PDF.
+
+The search dialog has **Search in project** and **Search in current file** tabs. Left/right arrow keys switch scopes, and the selected scope is remembered. Both scopes split whitespace-separated terms and match all terms on a line regardless of order. Current-file search uses the open working text, includes unsaved edits, ignores the project file mask, and can locate matching text in PDFs without switching to source mode.

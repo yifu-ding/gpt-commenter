@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {revealInFinder} from './src/finder.js';
+import {createDocumentNavigation} from './src/document-navigation.js';
+const dom=new JSDOM('<aside></aside>');globalThis.document=dom.window.document;let intersect;
+globalThis.IntersectionObserver=class{constructor(cb){intersect=cb;}observe(){}unobserve(){}disconnect(){}};
+let resolvePage;const panel=document.querySelector('aside'),nav=createDocumentNavigation(panel,{loadPage:()=>new Promise(resolve=>{resolvePage=resolve;}),jumpHeading(){},jumpPage(){}});
+nav.show({pdf:{pages:[{number:1,width:600,height:800}]},visible:true});const preview=panel.querySelector('.pdf-thumbnail'),image=preview.querySelector('img'),status=preview.querySelector('span');
+assert.equal(image.hidden,true);assert.equal(image.hasAttribute('src'),false);assert.equal(status.textContent,'Loading…');intersect([{isIntersecting:true,target:preview}]);resolvePage({image:'data:image/png;base64,AA=='});await Promise.resolve();assert.equal(image.hidden,true,'image remains hidden until decoding completes');image.dispatchEvent(new dom.window.Event('load'));assert.equal(image.hidden,false);assert.equal(status.hidden,true);image.dispatchEvent(new dom.window.Event('error'));assert.equal(image.hidden,true);assert.equal(status.textContent,'Preview unavailable');
+let call;const workspace={resolve:async(root,path)=>{assert.equal(root,'/project');assert.equal(path,'a file.md');return '/project/a file.md';}};
+assert.deepEqual(await revealInFinder(workspace,'/project','a file.md',{platform:'darwin',run:async(...args)=>{call=args;}}),{revealed:true});assert.equal(call[0],'/usr/bin/open');assert.deepEqual(call[1],['-R','/project/a file.md']);await assert.rejects(()=>revealInFinder({resolve:async()=>{throw Error('outside project');}},'/project','../escape',{platform:'darwin',run:async()=>{throw Error('must not run');}}),/outside project/);
+dom.window.close();console.log('PDF thumbnail loading/decoding/error placeholders and Finder argument/access boundaries passed');

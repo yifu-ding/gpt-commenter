@@ -82,10 +82,31 @@ try {
   assert.ok(scripts[0][1] === bundle, 'embedding must preserve bundled JavaScript literally');
   new Script(scripts[0][1], {filename: 'served-viewer.js'});
 
-  assert.equal(resource.contents[0]._meta['openai/ui'].preferredDisplayMode, 'fullscreen');
+  assert.equal(resource.contents[0]._meta['openai/ui'].preferredDisplayMode, 'inline');
   assert.deepEqual(client.getServerCapabilities().experimental['openai/settings'],{readTool:'markatlas_settings_read',updateTool:'markatlas_settings_update'});
   assert.equal((await client.callTool({name:'markatlas_settings_read',arguments:{}})).structuredContent.values.explanationModel,'gpt-6-luna');
   assert.equal((await client.callTool({name:'markatlas_settings_update',arguments:{set:{explanationModel:'gpt-6.1-sol'}}})).structuredContent.values.explanationModel,'gpt-6.1-sol');
+  const settings=await client.callTool({name:'markatlas_settings_read',arguments:{}});
+  assert.equal(settings.structuredContent.values.treePosition,'Left');
+  assert.equal(settings.structuredContent.values.showGitChanges,true);
+  assert.ok(settings.structuredContent.layout.some(group=>group.items.some(item=>item.tool==='markatlas_clear_recently_opened')));
+  assert.equal(settings.structuredContent.values.themeColor,'Host');
+  assert.ok(settings.structuredContent.layout[0].items.some(item=>item.property==='themeColor'));
+  assert.ok(!tools.some(tool=>tool.name==='markatlas_theme_color'));
+  const savedSettings=await client.callTool({name:'markatlas_settings_update',arguments:{set:{treePosition:'Right',outlinePosition:'Right',showGitChanges:false,themeColor:'Purple'}}});
+  assert.equal(savedSettings.structuredContent.values.showGitChanges,false);
+  assert.equal((await client.callTool({name:'markatlas_settings_update',arguments:{set:{showGitChanges:'false'}}})).isError,true);
+  const prompt=await client.callTool({name:'markatlas_clear_recently_opened',arguments:{}});
+  assert.equal(prompt.structuredContent.status,'confirmation_required');
+  assert.equal((await client.callTool({name:'markatlas_settings_read',arguments:{}})).structuredContent.recentHistoryRevision,'');
+  const clearResource=await client.readResource({uri:'ui://gpt-commenter/clear-recent-history'});
+  assert.match(clearResource.contents[0].text,/alertdialog/);assert.ok(!clearResource.contents[0].text.includes('/* SCRIPT */'));
+  assert.equal((await client.callTool({name:'markatlas_confirm_clear_recently_opened',arguments:{confirmed:false}})).isError,true);
+  const cleared=await client.callTool({name:'markatlas_confirm_clear_recently_opened',arguments:{confirmed:true}});
+  assert.ok(cleared.structuredContent.recentHistoryRevision);
+  const afterClear=await client.callTool({name:'markatlas_settings_read',arguments:{}});
+  assert.deepEqual(afterClear.structuredContent.values,savedSettings.structuredContent.values);
+  assert.equal(afterClear.structuredContent.recentHistoryRevision,cleared.structuredContent.recentHistoryRevision);
   const unsupported=await client.callTool({name:'generate_review_explanation',arguments:{annotation:{id:'test',selectedText:'Hello',sourceName:'a.md',startLine:1,endLine:1,detail:'short'}}});
   assert.equal(unsupported.isError,undefined,JSON.stringify(unsupported));assert.equal(unsupported.structuredContent.answer,'Background explanation from a fresh conversation.');
   const backgroundReply=await client.callTool({name:'read_markdown_explanation',arguments:{requestId:unsupported.structuredContent.requestId}});assert.equal(backgroundReply.structuredContent.status,'answered');
@@ -125,13 +146,13 @@ try {
   const liveResult=JSON.parse((await client.callTool({name:'resolve_review_annotation',arguments:{id:liveId}})).content[0].text);
   assert.equal(liveResult.current.startLine,2);assert.equal(liveResult.hasUnsavedEdits,true);
   const batchEntry={root:codeRoot,path:'review.js',etag:codeSave.structuredContent.etag,item:{id:liveId,sourceName:'review.js',selectedText:'old quote',message:'Review this'}};
-  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,true,'batch must not send unsaved file edits');
+  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,undefined,'comments may be sent with unsaved draft context');
   const savedDocument={...liveDocument,baseText:liveDocument.text};
   const savedBatchFile=await client.callTool({name:'save_review_project_file',arguments:{root:codeRoot,path:'review.js',text:liveDocument.text,expectedEtag:codeSave.structuredContent.etag}});
   await client.callTool({name:'update_review_document',arguments:savedDocument});
   const batchResult=await client.callTool({name:'prepare_review_batch',arguments:{entries:[{...batchEntry,etag:savedBatchFile.structuredContent.etag}]}});
   assert.equal(batchResult.isError,undefined);assert.equal(batchResult.structuredContent.entries[0].item.startLine,2);assert.equal(batchResult.structuredContent.entries[0].item.selectedText,'const');
-  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,true,'stale disk references fail final validation');
+  assert.equal((await client.callTool({name:'prepare_review_batch',arguments:{entries:[batchEntry]}})).isError,undefined,'disk changes refresh context without blocking Send');
   const liveRead=JSON.parse((await client.callTool({name:'read_review_working_copy',arguments:{id:liveId,startLine:2,endLine:2}})).content[0].text);assert.equal(liveRead.text,'const value = 2;');
   console.log('MCP viewer entrypoints, tool results, and UI resource checks passed (desktop rendering not tested)');
 } finally {

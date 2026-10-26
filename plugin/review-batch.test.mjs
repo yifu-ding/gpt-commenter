@@ -40,14 +40,14 @@ assert.match(grouped[0].text,/File 1 · comments 1–2/);assert.match(grouped[0]
 const unrelated=Object.assign(new Error('Connection lost'),{code:-32601});
 await assert.rejects(()=>sendReviewBatch({message:{send:async()=>{throw unrelated;}}},entries),error=>error===unrelated);
 let reads=0,locates=0;
-const dependencies={reviews:{async resolve(id){return {status:'current',hasUnsavedEdits:false,current:{startLine:30,endLine:32,excerpt:id==='a'?'Current passage':'Figure'}};}},workspace:{read:async()=>({etag:'one'})},latex:{async read(){reads++;return {etag:'one',fingerprint:'hash',main:'main.tex'};},async locate(root,path,selection){locates++;assert.equal(selection.quote,'Current passage');return {...pdf.source,line:30,endLine:32};}}};
+const dependencies={reviews:{async resolve(id){return {status:'current',hasUnsavedEdits:false,current:{startLine:30,endLine:32,excerpt:id==='a'?'Current passage':'Figure'}};}},workspace:{read:async()=>({etag:'one',text:'Current passage'})},latex:{async read(){reads++;return {etag:'one',text:'Current passage',fingerprint:'hash',main:'main.tex'};},async locate(root,path,selection){locates++;assert.equal(selection.quote,'Current passage');return {...pdf.source,line:30,endLine:32};}}};
 const prepared=await prepareReviewBatch(entries,dependencies);
 assert.equal(reads,1,'read each PDF once for a batch');assert.equal(locates,1,'screenshots do not attempt text mapping');assert.equal(prepared[0].item.selectedText,'Current passage');assert.equal(prepared[0].item.pdf.source.line,30);
-await assert.rejects(()=>prepareReviewBatch([{...entries[0],etag:'old'}],dependencies),/changed on disk/);
-await assert.rejects(()=>prepareReviewBatch([{...entries[0],item:{...entries[0].item,pdf:{...pdf,fingerprint:'old'}}}],dependencies),/rebuilt/);
-assert.deepEqual(await prepareReviewBatch([{...entries[1],item:{...entries[1].item,anchorStatus:'edited'}}],dependencies),[]);
-assert.deepEqual(await prepareReviewBatch(entries,{...dependencies,reviews:{resolve:async()=>({status:'deleted'})}}),[]);
-await assert.rejects(()=>prepareReviewBatch(entries,{...dependencies,reviews:{resolve:async()=>({status:'current',hasUnsavedEdits:true})}}),/Save edits/);
+assert.equal((await prepareReviewBatch([{...entries[0],etag:'old'}],dependencies))[0].item.diskContext.changed,true);
+assert.equal((await prepareReviewBatch([{...entries[0],item:{...entries[0].item,pdf:{...pdf,fingerprint:'old'}}}],dependencies))[0].item.diskContext.matched,false);
+assert.equal((await prepareReviewBatch([{...entries[1],item:{...entries[1].item,anchorStatus:'edited'}}],dependencies)).length,1);
+assert.equal((await prepareReviewBatch(entries,{...dependencies,reviews:{resolve:async()=>({status:'deleted'})}})).length,2);
+assert.equal((await prepareReviewBatch(entries,{...dependencies,reviews:{resolve:async()=>({status:'current',hasUnsavedEdits:true})}})).length,2);
 const multi=reviewBatchContent([...entries,{root:'/other',path:'code.js',item:{id:'c',message:'Rename',selectedText:'const a=1;',startLine:2,endLine:2}}]);
 assert.match(multi.map(c=>c.text || '').join('\n'),/Project: \/other\nFile: code.js\nLocal path: \/other\/code.js\n3\. Lines 2–2/);
 console.log('Batch grouping, screenshot association, send semantics, and final validation checks passed');
@@ -56,4 +56,12 @@ const fullQuote='A long passage '.repeat(80);
 await prepareReviewBatch([entries[0]],{...dependencies,reviews:{resolve:async(id,options)=>{assert.equal(options.fullSelection,true);return {status:'current',hasUnsavedEdits:false,current:{startLine:2,endLine:8,startOffset:45,excerpt:'A long … passage',selectedText:fullQuote}};}},latex:{...dependencies.latex,locate:async(root,path,selection)=>{assert.equal(selection.quote,fullQuote,'source lookup uses the complete selection internally');assert.equal(selection.startOffset,45);return pdf.source;}}});
 
 const mixed=await prepareReviewBatch(entries,{...dependencies,reviews:{resolve:async(id)=>id==='a'?{status:'deleted'}:{status:'current',hasUnsavedEdits:false,current:{startLine:1,endLine:1,excerpt:'Figure'}}}});
-assert.deepEqual(mixed.map(entry=>entry.item.id),['b'],'deleted comments do not block valid comments');
+assert.deepEqual(mixed.map(entry=>entry.item.id),['a','b'],'changed passages retain the original review intent');
+
+const htmlItem={id:'html-region',selectedText:'Visible caption',message:'Review layout',startLine:1,endLine:2,html:{mapping:'region',region:{x:10,y:20,width:100,height:80},screenshot:'data:image/jpeg;base64,YQ=='}};
+const htmlContent=reviewBatchContent([{root:'/html',path:'index.html',item:htmlItem}]);
+assert.ok(htmlContent.some(c=>c.type==='image' && c.data==='YQ=='));assert.match(htmlContent.map(c=>c.text||'').join(' '),/HTML region.*visual reference/);
+const htmlPrepared=await prepareReviewBatch([{root:'/html',path:'index.html',item:htmlItem}],dependencies);assert.equal(htmlPrepared[0].item.selectedText,'Visible caption');
+assert.equal((await prepareReviewBatch([{root:'/html',path:'index.html',item:{...htmlItem,anchorStatus:'edited'}}],dependencies)).length,1);
+
+const preview=reviewBatchContent(entries,{previewChanges:true,attachments:true}).map(c=>c.text||'').join('\n');assert.match(preview,/create_review_patch/);assert.doesNotMatch(preview,/Edit the \.tex source and recompile|Apply each comment/);await sendReviewBatch({message:{async send(params){message=params;return {};}}},entries,'active','/project',{previewChanges:true});assert.match(message.content.at(-1).text,/Do not apply changes/);

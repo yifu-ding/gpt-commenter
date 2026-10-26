@@ -4,8 +4,8 @@ import {createFolderPicker} from './src/folder-picker.js';
 let call;
 const answer=result=>async(...args)=>{call=args;await writeFile(args[1].at(-1),JSON.stringify(result));};
 const pick=createFolderPicker({platform:'darwin',bundle:'/plugin/FolderPicker.app',run:answer({path:'/Users/person/My project'})});
-assert.equal(await pick(),'/Users/person/My project');assert.equal(call[0],'/usr/bin/open');
-assert.deepEqual(call[1].slice(0,4),['-W','-n','/plugin/FolderPicker.app','--args']);
+assert.equal(await pick(),'/Users/person/My project');assert.equal(call[0],'/plugin/FolderPicker.app/Contents/MacOS/folder-picker');
+assert.equal(call[1].length,1);
 assert.equal(await createFolderPicker({platform:'darwin',run:answer({cancelled:true})})(),null);
 await assert.rejects(createFolderPicker({platform:'darwin',run:answer({path:'relative'})}),/valid folder/);
 await assert.rejects(createFolderPicker({platform:'win32'}),/macOS only/);
@@ -17,5 +17,5 @@ let tries=0;const retry=createFolderPicker({platform:'darwin',run:async(...args)
 await assert.rejects(retry,/timed out/);assert.equal(await retry(),null,'a failed or timed-out chooser releases its lock');
 console.log('Native folder selection, cancellation, refocusing, shared requests, timeout recovery, and command boundaries passed');
 
-const filePicker=createFolderPicker({platform:'darwin',mode:'file',run:async(command,args)=>{assert.equal(args.at(-1),'file');await writeFile(args[args.indexOf('--args')+1],JSON.stringify({path:'/chosen/report.pdf'}));}});
+const filePicker=createFolderPicker({platform:'darwin',mode:'file',run:async(command,args)=>{assert.equal(args.at(-1),'file');await writeFile(args[0],JSON.stringify({path:'/chosen/report.pdf'}));}});
 assert.equal(await filePicker(),'/chosen/report.pdf');

@@ -16,7 +16,7 @@ try{
   await writeFile(join(root,'main.tex'),main);await writeFile(join(root,'chapter.tex'),'A uniquely selected passage for review.\n');
   const workspace=workspaceAccess(async()=>[]);await workspace.list(root);const service=latexService(workspace);
   let runNumber=0;async function compile(){const out=join(root,`test-build-${++runNumber}`);await mkdir(out);await promisify(execFile)(latexmk,['-norc','-pdf','-synctex=1','-interaction=nonstopmode','-halt-on-error','-no-shell-escape',`-outdir=${out}`,join(root,'main.tex')],{cwd:root,env:{...process.env,PATH:`/Library/TeX/texbin:${process.env.PATH}`}});return service.read(root,`test-build-${runNumber}/main.pdf`);}
-  const first=await compile();assert.equal(first.pages.length,1);assert.match(first.text,/uniquely selected/);
+  const first=await compile();assert.deepEqual((await service.sources(root,first.path)).sort(),['chapter.tex','main.tex']);assert.equal(first.pages.length,1);assert.match(first.text,/uniquely selected/);
   assert.equal((await workspace.list(root)).root.children.some(n=>n.name==='.gpt-commenter-build'),false,'generated output stays out of the project tree');
   const start=first.text.indexOf('uniquely selected'),word=first.pages[0].words.find(w=>w.startOffset<=start&&w.endOffset>start);
   const selection={page:1,x:word.x,y:word.y,startOffset:start,quote:'uniquely selected passage',fingerprint:first.fingerprint};

@@ -14,8 +14,9 @@ export function createFileRefresh({apply,isBusy,onError=()=>{},schedule=cb=>setT
     const state=active;if(!state || state.running)return;
     state.running=true;
     try {
+      const version=state.version;
       const result=await state.read(state.etag);
-      if(state!==active)return;
+      if(state!==active || version!==state.version)return;
       if(!result.notModified) {
         if(typeof result.text!=='string')throw Error('Updated file has no readable text.');
         state.etag=result.etag;
@@ -32,8 +33,8 @@ export function createFileRefresh({apply,isBusy,onError=()=>{},schedule=cb=>setT
     finally{state.running=false;later(state);}
   }
   function watch({read,text,etag,dispose}) {
-    stop();active={read,text,etag,dispose,pending:null,running:false};later(active);
+    stop();active={read,text,etag,dispose,pending:null,running:false,version:0};later(active);
   }
-  function setText(text,etag) {if(active && typeof text==='string'){active.text=text;active.pending=null;if(etag!==undefined)active.etag=etag;}}
+  function setText(text,etag) {if(active && typeof text==='string'){active.version++;active.text=text;active.pending=null;if(etag!==undefined)active.etag=etag;}}
   return {watch,stop,check,setText};
 }

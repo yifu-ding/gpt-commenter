@@ -17,12 +17,15 @@ export function selectionPrompt(item,{fullSelection=false,wordLimit=false}={}) {
   if(p?.source?.status==='located')lines.push(`LaTeX: ${relativeReviewPath(p.source.sourcePath || p.source.path,root)} · lines ${p.source.line}–${p.source.endLine}`);
   else if(p?.main)lines.push(`LaTeX: ${relativeReviewPath(p.main,root)} · locate the quoted passage.`);
   if(p?.region)lines.push(`Region in PDF points: ${JSON.stringify(p.region)}`);
-  if(p?.screenshot)lines.push('Screenshot: attached for this selection.');
+  if(item.html)lines.push('HTML rendered selection. Verify the visible content against the HTML source before editing.');
+  if(item.html?.region)lines.push(`Region in CSS pixels: ${JSON.stringify(item.html.region)}`);
+  if(p?.screenshot || item.html?.screenshot)lines.push('Screenshot: attached for this selection.');
   if(explain && item.detail)lines.push(`Detail: ${item.detail}${wordLimit?` (about ${wordLimits[item.detail]} words)`:''}`);
   // A background explanation has no file-reading tools, so it needs the full selection.
   const referenced=!!item.sourcePath && !item.hasUnsavedEdits && /^[a-f0-9]{64}$/i.test(item.documentHash || '');
   const quote=fullSelection?item.selectedText || '':p || referenced?reviewExcerpt(item.selectedText):item.selectedText || '';
   if(quote)lines.push('',fullSelection?`<selection>\n${quote}\n</selection>`:quote.split('\n').map(line=>`> ${line}`).join('\n'));
+  if(explain && item.explanationPrompt?.trim())lines.push('',`User explanation instructions: ${item.explanationPrompt.trim()}`);
   if(explain)lines.push('','Explain the selected passage or screenshot in context. Do not edit files.');
   else {
     lines.push('',`Comment: ${item.message}`,'');

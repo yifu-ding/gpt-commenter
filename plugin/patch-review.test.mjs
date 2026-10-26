@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {readFileSync} from 'node:fs';
+import {createPatchReview} from './src/patch-review.js';
+const dom=new JSDOM(readFileSync(new URL('./src/viewer.html',import.meta.url),'utf8'),{url:'https://patch.test',pretendToBeVisual:true}),document=dom.window.document,$=id=>document.getElementById(id);
+let record={root:'/project',path:'chapter.tex',id:'patch-id',revision:1,title:'Clarify result',baseText:'Old\n',proposedText:'New\n',diff:'--- a/chapter.tex\n+++ b/chapter.tex\n@@ -1 +1 @@\n-Old\n+New\n',context:'Please clarify the result',comments:[]},applied=false,sent=null,conflict=false,calls=[],offered=null;
+const ui=createPatchReview({document,onSelection:(selection)=>{offered=selection;},beforeOpen:async()=>true,onApplied:async()=>{assert.equal(await ui.canLeave(),true,'the source can reopen after applying a patch');applied=true;},send:async value=>{sent=value;},call:async(name,args)=>{calls.push({name,args});if(name==='list_review_patches')return {patches:applied?[]:[{...record},{...record,id:'other',title:'Alternative'}]};if(name==='read_review_patch')return structuredClone(record);if(name==='update_review_patch'){assert.equal(args.expectedRevision,record.revision);if(args.comment)record.comments.push({...args.comment,revision:record.revision});if(args.proposedText!==undefined)record.proposedText=args.proposedText;record.revision++;return structuredClone(record);}if(name==='apply_review_patch'){if(conflict)throw Error('Source changed');assert.equal(args.expectedRevision,record.revision);return structuredClone(record);}throw Error(name);}});
+const until=async fn=>{for(let n=0;n<100;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}assert.ok(fn(),'UI completed');};
+try{
+ ui.setLocation({root:'/project',path:'main.pdf'});await until(()=>!$('review-patches').hidden);$('review-patches').click();assert.equal($('patch-menu').hidden,false);assert.equal($('patch-menu').children.length,2);$('patch-menu').children[0].click();await until(()=>!$('patch-review').hidden);
+ assert.equal($('apply-patches').title,'Apply this patch to source file');assert.ok(document.querySelector('.patch-added'));assert.ok(document.querySelector('.patch-removed'));assert.match($('patch-review').textContent,/Please clarify the result/);
+ assert.equal($('patch-comment'),null,'reuse the shared floating composer instead of a second input');
+ const row=document.querySelector('.patch-added'),range=document.createRange();range.selectNodeContents(row);dom.window.getSelection().removeAllRanges();dom.window.getSelection().addRange(range);document.querySelector('.patch-diff').dispatchEvent(new dom.window.Event('pointerup'));
+ assert.equal(offered.selectedText,'+New');assert.equal(offered.patch.id,record.id);
+ await ui.saveComment(offered.patch,'Keep the qualifier');assert.equal(record.comments.length,1);assert.equal(record.comments[0].quote,'+New');assert.equal(applied,false);assert.match($('patch-review').textContent,/Keep the qualifier/);
+ await assert.rejects(ui.saveComment(offered.patch,'Outdated selection'),/patch changed/);
+ $('patch-proposed').value='Better\n';[...$('patch-review').querySelectorAll('button')].find(b=>b.textContent==='Save patch').click();await until(()=>record.proposedText==='Better\n' && !$('patch-proposed').disabled);assert.equal(applied,false);
+ [...$('patch-review').querySelectorAll('button')].find(b=>b.textContent==='Send').click();await until(()=>sent && !$('patch-proposed').disabled);assert.match(sent.content[0].text,/Do not modify source files/);assert.match(sent.content[0].text,/Keep the qualifier/);assert.equal(record.comments.length,1,'saving/sending must not duplicate comments');
+ conflict=true;$('apply-patches').click();await until(()=>$('patch-error').textContent==='Source changed');assert.equal(applied,false);assert.equal($('patch-review').hidden,false);assert.equal($('patch-toast').hidden,true,'a failed apply must not show success');
+ conflict=false;await until(()=>!$('apply-patches').disabled);$('apply-patches').click();await until(()=>applied);assert.equal($('patch-review').hidden,true);await until(()=>$('review-patches').hidden);
+ assert.equal(calls.filter(c=>c.name==='apply_review_patch').length,2);assert.equal($('patch-controls').closest('header'),null);assert.equal($('patch-toast').hidden,false);assert.equal($('patch-toast').textContent,'Patch applied');await new Promise(resolve=>setTimeout(resolve,2050));assert.equal($('patch-toast').hidden,true);
+ console.log('Patch selector, red/green diff, comments, cached editing, revise-only send, conflict UI and explicit apply passed');
+}finally{dom.window.dispatchEvent(new dom.window.Event('pagehide'));dom.window.close();}

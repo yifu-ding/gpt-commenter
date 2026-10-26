@@ -15,6 +15,6 @@ export function moveAnnotations(items,before,after,changes=textChanges(before,af
       if(restored){start=restored.fromB;end=restored.toB;}
     }
     const deleted=end<=start;
-    return {...item,...sourceSelection(after,start,Math.max(start,end)),originalSnapshot,sourceText:after.slice(start,Math.max(start,end)),anchorStatus:deleted?'deleted':touched?'edited':item.anchorStatus==='deleted'?'current':item.anchorStatus || 'current',updatedAt:new Date().toISOString()};
+    return {...item,...sourceSelection(after,start,Math.max(start,end)),...(item.html?{selectedText:item.selectedText}:{}),originalSnapshot,sourceText:after.slice(start,Math.max(start,end)),anchorStatus:deleted?'deleted':(touched || item.html?.region && before!==after)?'edited':item.anchorStatus==='deleted'?'current':item.anchorStatus || 'current',updatedAt:new Date().toISOString()};
   });
 }

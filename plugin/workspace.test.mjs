@@ -13,6 +13,12 @@ try {
  const access=workspaceAccess(async()=>supplied);
  const listed=await access.list();assert.equal(listed.rootPath,root);assert.equal(listed.root.name,'project');
  assert.equal(listed.root.children.length,2);assert.ok(listed.omitted>=2);
+ // Equivalent root spellings must not trigger a false project-disconnected error.
+ await symlink(root,join(base,'project-alias'));
+ assert.equal((await access.read(join(base,'project-alias'),'docs/page.md')).text,'# Current project');
+ let failures=1;const transient=workspaceAccess(async()=>{if(failures-->0)throw Error('Temporary host RPC failure');return supplied;});
+ assert.equal((await transient.read(root,'docs/page.md')).text,'# Current project');
+ const offline=workspaceAccess(async()=>{throw Error('Offline');});await assert.rejects(()=>offline.read(root,'docs/page.md'),/Could not refresh project access/);
  const first=await access.read(root,'docs/page.md');assert.equal(first.text,'# Current project');
  const unchanged=await access.read(root,'docs/page.md',first.etag);assert.equal(unchanged.notModified,true);assert.equal(unchanged.text,undefined);
  await writeFile(join(root,'docs','page.md'),'# Changed by chat');
@@ -78,5 +84,19 @@ try {
  await assert.rejects(()=>manual.nativeOfficePath(root,'docs/page.md'),/Choose a Word/);
  await assert.rejects(()=>manual.nativeOfficePath(root,'../secret.md'),/outside/);
  await symlink(join(base,'secret.md'),join(root,'escape.docx'));await assert.rejects(()=>manual.nativeOfficePath(root,'escape.docx'),/outside/);
+ await mkdir(join(root,'empty-target'));
+ assert.ok((await manual.list(root)).root.children.some(n=>n.name==='empty-target' && n.type==='directory'));
+ const beforeMove=await manual.read(root,'docs/page.md');
+ assert.equal((await manual.move(root,'docs/page.md','empty-target')).path,'empty-target/page.md');
+ assert.equal((await manual.read(root,'empty-target/page.md')).text,beforeMove.text);
+ await assert.rejects(()=>manual.read(root,'docs/page.md'),/ENOENT/);
+ await writeFile(join(root,'docs/page.md'),'Do not replace');
+ await assert.rejects(()=>manual.move(root,'empty-target/page.md','docs'),/already exists/);
+ assert.equal((await manual.read(root,'docs/page.md')).text,'Do not replace');
+ await assert.rejects(()=>manual.move(root,'empty-target/page.md','..'),/current project/);
+ await assert.rejects(()=>manual.move(root,'empty-target/page.md','node_modules'),/outside/);
+ await assert.rejects(()=>manual.move(root,'escape.md','docs'),/outside/);
+ await assert.rejects(()=>manual.move(root,'docs',''),/regular file/);
+ assert.equal((await manual.move(root,'empty-target/page.md','')).path,'page.md');
  console.log('Current-project roots, configured fallback, file reads, traversal and symlink boundary checks passed');
 }finally{await rm(base,{recursive:true,force:true});}

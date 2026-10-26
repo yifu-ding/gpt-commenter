@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {EditorState} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
+import {renderMarkdown} from './src/markdown.js';
+import {liveMarkdown,revealBlock,markdownPreviewUnits} from './src/live-markdown.js';
+const dom=new JSDOM('<article id="document"></article><main></main>',{pretendToBeVisual:true});
+for(const name of ['window','document','MutationObserver','HTMLElement','Node'])globalThis[name]=dom.window[name];
+globalThis.requestAnimationFrame=window.requestAnimationFrame.bind(window);globalThis.cancelAnimationFrame=window.cancelAnimationFrame.bind(window);
+const text='---\ntitle: Obsidian 格式样例\naliases:\n  - Obsidian Markdown 示例\ntags: [obsidian, markdown]\ncssclasses:\n  - demo-note\ncreated: 2026-05-09\ncount: 0\nready: false\n---\n\n# Body';
+const el=document.querySelector('article');renderMarkdown(el,text,'rendered');assert.equal(el.querySelectorAll('dt').length,7);assert.deepEqual([...el.querySelectorAll('.metadata-tag')].map(n=>n.textContent),['obsidian','markdown']);assert.match(el.textContent,/2026-05-09/);assert.match(el.textContent,/0/);assert.match(el.textContent,/false/);assert.equal(el.querySelector('h1').textContent,'Body');
+renderMarkdown(el,'---\ntitle: "<img src=x onerror=alert(1)>"\n---','rendered');assert.equal(el.querySelector('img'),null);assert.match(el.textContent,/<img/);
+renderMarkdown(el,'---\ntags: [unclosed\n---','rendered');assert.ok(el.querySelector('.metadata pre'),'invalid YAML remains readable');
+const state=EditorState.create({doc:text,extensions:liveMarkdown()});const units=markdownPreviewUnits(state.doc);assert.equal(units[0].kind,'yaml');assert.equal(units.filter(u=>u.kind==='thematicBreak').length,0);
+const view=new EditorView({parent:document.querySelector('main'),state});assert.equal(view.dom.querySelectorAll('.metadata-properties').length,1);assert.equal(view.dom.querySelectorAll('dt').length,7);
+view.dispatch({selection:{anchor:text.indexOf('title')},effects:revealBlock.of(text.indexOf('title'))});assert.equal(view.dom.querySelector('.metadata-properties'),null);assert.match(view.dom.textContent,/title: Obsidian/);assert.ok(view.dom.querySelector('h1'));
+view.dispatch({selection:{anchor:text.indexOf('Body')},effects:revealBlock.of(text.indexOf('Body'))});assert.ok(view.dom.querySelector('.metadata-properties'));assert.equal(view.state.doc.toString(),text);
+view.destroy();
+const titled='# 06. 术中风险预测\n\n---\ndate: 2026-10-25\n---\n\nBody';
+renderMarkdown(el,titled,'rendered');assert.equal(el.querySelector('h1')?.textContent,'06. 术中风险预测');assert.equal(el.querySelectorAll('.metadata-properties').length,1);assert.equal(el.querySelector('dt')?.textContent,'date');
+const titledState=EditorState.create({doc:titled,extensions:liveMarkdown()});
+const titledUnits=markdownPreviewUnits(titledState.doc);assert.deepEqual(titledUnits.map(unit=>unit.kind),['heading','yaml','paragraph']);
+assert.equal(titledUnits[1].from,titled.indexOf('---'));assert.equal(titledUnits[1].to,titled.lastIndexOf('---')+3);
+const titledView=new EditorView({parent:document.querySelector('main'),state:titledState});assert.equal(titledView.dom.querySelectorAll('.metadata-properties').length,1);
+titledView.dispatch({selection:{anchor:titled.indexOf('date')},effects:revealBlock.of(titled.indexOf('date'))});assert.equal(titledView.dom.querySelector('.metadata-properties'),null);
+titledView.dispatch({selection:{anchor:titled.indexOf('Body')},effects:revealBlock.of(titled.indexOf('Body'))});assert.equal(titledView.dom.querySelectorAll('.metadata-properties').length,1);titledView.destroy();
+for(const prefix of ['## Smaller heading\n\n','A paragraph\n\n','# Heading\n\nAnother paragraph\n\n','# First\n\n# Second\n\n']){
+ const invalid=prefix+'---\ndate: 2026-10-25\n---';renderMarkdown(el,invalid,'rendered');assert.equal(el.querySelector('.metadata-properties'),null,prefix);assert.equal(markdownPreviewUnits(EditorState.create({doc:invalid}).doc).some(unit=>unit.kind==='yaml'),false,prefix);
+}
+dom.window.close();console.log('Properties types, safe values, leading H1 exception and editable frontmatter round-trip passed');
