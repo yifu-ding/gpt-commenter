@@ -736,10 +736,14 @@ $('message').addEventListener('keydown',e => {
 });
 let offeredSelection=null;
 function canCommentShortcut(){return !$('patch-review').hidden || !!pdfDocument || filePreview?.kind==='word' || codeMode!=='edit' && mode!=='source' && (!codeFile || isHtmlPreview());}
-function hideSelectionAction(){ $('selection-action').hidden=true;offeredSelection=null; }
+function hideSelectionAction(){
+  if(offeredSelection?.selection.pdf?.region && pdfDocument && !pending)pdfViewer.show(pdfDocument,items);
+  $('selection-action').hidden=true;offeredSelection=null;
+}
 function offerSelection(selection,anchor){
   if(!commenting && !selection.patch)return;
   offeredSelection={selection,anchor,revision};
+  if(pdfDocument && selection.pdf?.region)pdfViewer.show(pdfDocument,[...items,{...selection,id:'pending-selection',temporary:true}]);
   const button=$('selection-action');button.hidden=false;button.querySelector('kbd').hidden=!canCommentShortcut();button.title=canCommentShortcut()?'Comment (C)':'Comment';
   const rect=anchor || {left:24,top:100};button.style.left=`${Math.max(8,Math.min(viewWidth()-120,rect.left))}px`;button.style.top=`${Math.max(48,rect.top-38)}px`;
 }
