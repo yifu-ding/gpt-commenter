@@ -80,7 +80,18 @@ export function renderMarkdown(container, source, mode, items = [], options = {}
     const fragment=purify.sanitize(html,{RETURN_DOM_FRAGMENT:true,ADD_TAGS:['annotation','semantics'],ADD_ATTR:['encoding']});
     const walker=doc.createTreeWalker(fragment,4);let n;
     while(n=walker.nextNode()){mappedNodes.push(n);mappings.set(n,{start,end});}
+    const images=[...fragment.querySelectorAll('img[src]')];
     parent.append(fragment);
+    for(const image of images){
+      const target=image.getAttribute('src');
+      if(!target || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(target) || !options.resolveEmbed)continue;
+      image.removeAttribute('src');
+      Promise.resolve(options.resolveEmbed(target)).then(result=>{
+        if(!result || result.kind!=='image'){image.setAttribute('src',target);return;}
+        if(!parent.contains(image))return;
+        image.src=result.url;
+      }).catch(error=>{image.setAttribute('src',target);image.classList.add('is-unresolved');image.title=error.message;});
+    }
   }
   function localLink(parent,target,label,start,end,embed=false){
     const link=doc.createElement(embed?'span':'a');link.className=embed?'internal-embed':'internal-link';
