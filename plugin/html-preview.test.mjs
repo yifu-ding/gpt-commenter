@@ -38,5 +38,8 @@ w.dispatchEvent(new w.MessageEvent('message',{source:w,data:{markatlas:'test-cha
 const overlay=d.querySelector('#atlas-region-overlay');assert.equal(overlay.hidden,false);
 for(const [type,x,y] of [['pointerdown',20,30],['pointermove',120,110],['pointerup',120,110]])overlay.dispatchEvent(new w.MouseEvent(type,{clientX:x,clientY:y,button:0,bubbles:true}));
 await new Promise(r=>setTimeout(r,30));note=messages.findLast(m=>m.type==='selection');assert.equal(note.html.mapping,'region');assert.equal(note.html.region.width,100);assert.equal(note.html.screenshot,'data:image/jpeg;base64,YQ==');assert.equal(overlay.hidden,true);
+const savedRegion={id:'region-note',html:{region:note.html.region}};
+w.dispatchEvent(new w.MessageEvent('message',{source:w,data:{markatlas:'test-channel',type:'notes',notes:[savedRegion],active:null,enabled:true}}));
+const regionMark=d.querySelector('.atlas-region-note');assert.ok(regionMark,'saved HTML regions stay visible');assert.equal(regionMark.style.borderRadius,'0px');assert.equal(regionMark.style.getPropertyPriority('border-radius'),'important','page button styles cannot round saved region corners');
 w.getSelection().removeAllRanges();d.body.click();assert.equal(messages.at(-1).type,'dismiss','blank clicks dismiss the parent composer');
 dom.window.close();console.log('HTML scripts, relative resources, repeated text, entities, cross-element selections, C, and stale-text guards passed');

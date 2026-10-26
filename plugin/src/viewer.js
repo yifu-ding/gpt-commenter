@@ -284,7 +284,7 @@ async function sendQueuedReview(target='active'){
   }catch(error){composerUnavailable=error.code==='COMPOSER_UNAVAILABLE';$('review-error').textContent=error.message;}
   finally{batchSending=false;main.inert=false;header.inert=false;$('project-drawer').inert=false;$('composer').inert=false;renderBatch();}
 }
-const patchReview=createPatchReview({document,call:serverData,onSelection:offerSelection,onClose:()=>close(),send:async message=>{if(!extensions.message)throw Error('No chat input is available.');const result=await extensions.message.send(message);if(result?.isError)throw Error('Could not send patch comments.');return result;},beforeOpen:async()=>{if(!await canLeaveFile())return false;close();hideSelectionAction();return true;},onApplied:async()=>{const path=activeProjectPath;if(path){activeProjectPath=null;await openProjectFile(path);}}});
+const patchReview=createPatchReview({document,call:serverData,onSelection:offerSelection,onClose:()=>close(),onViewChange:()=>updateLayout(),getWrapLines:()=>wrapLines,send:async message=>{if(!extensions.message)throw Error('No chat input is available.');const result=await extensions.message.send(message);if(result?.isError)throw Error('Could not send patch comments.');return result;},beforeOpen:async()=>{if(!await canLeaveFile())return false;close();hideSelectionAction();return true;},onApplied:async()=>{const path=activeProjectPath;if(path){activeProjectPath=null;await openProjectFile(path);}}});
 try{$('preview-changes').setAttribute('aria-pressed',String(localStorage.getItem('markatlas:preview-changes')==='true'));}catch{}
 $('preview-changes').addEventListener('click',()=>{const active=$('preview-changes').getAttribute('aria-pressed')!=='true';$('preview-changes').setAttribute('aria-pressed',String(active));try{localStorage.setItem('markatlas:preview-changes',String(active));}catch{}});
 $('review-send').addEventListener('click',()=>sendQueuedReview());
@@ -345,6 +345,7 @@ function isSourceOnlyFile(){return !!fileName && codeFile && !filePreview && !pd
 function isSourceView(){return !!fileName && !filePreview && !pdfDocument && (mode==='source' || isSourceOnlyFile());}
 function updateEditorControls(){
   const word=filePreview?.kind==='word',paged=!!pdfDocument || word;
+  const pdfSource=isLinkedPdfSource();
   const textDocument=!!fileName && !pdfDocument && !filePreview;
   $('font-tools').hidden=!textDocument;$('document').classList.toggle('text-document',textDocument);
   $('pdf-tools').hidden=!paged;$('pdf-page-float').hidden=!word;$('document').classList.toggle('pdf-document',!!pdfDocument);$('document').classList.toggle('word-document',word);
@@ -354,19 +355,20 @@ function updateEditorControls(){
   $('pdf-screenshot').hidden=!pdfDocument && !isHtmlPreview();
   $('pdf-screenshot').title=isHtmlPreview()?'Select HTML region':'Circle an area to comment';
   $('pdf-screenshot').setAttribute('aria-label',isHtmlPreview()?'Select HTML region':'Circle an area to comment');
-  $('mode-cycle').hidden=!fileName || !!filePreview || isSourceOnlyFile() || (!!pdfDocument && !pdfDocument.main);
-  const modeLabel=isMarkdown(fileName)?(mode==='source'?'Source':codeMode==='edit'?'Edit':'Preview'):/\.html?$/i.test(fileName)?(mode==='source'?'Source':'Preview'):'Source';
+  $('mode-cycle').hidden=!fileName || !!filePreview || (isSourceOnlyFile() && !pdfSource) || (!!pdfDocument && !pdfDocument.main);
+  const modeLabel=pdfSource?'Preview':isMarkdown(fileName)?(mode==='source'?'Source':codeMode==='edit'?'Edit':'Preview'):/\.html?$/i.test(fileName)?(mode==='source'?'Source':'Preview'):'Source';
   toolbarIcon('mode-cycle',modeLabel,modeLabel.toLowerCase());
-  $('mode-cycle').title=`${modeLabel} — Preview → Edit → Source (⌘/ / Ctrl+/)`;
-  $('mode-cycle').disabled=!isMarkdown(fileName) && !/\.html?$/i.test(fileName) && !pdfDocument;
+  $('mode-cycle').title=pdfSource?'Preview PDF':`${modeLabel} — Preview → Edit → Source (⌘/ / Ctrl+/)`;
+  $('mode-cycle').disabled=!isMarkdown(fileName) && !/\.html?$/i.test(fileName) && !pdfDocument && !pdfSource;
   $('code-edit').hidden=!fileName || !!pdfDocument || !!filePreview || isSourceOnlyFile();
   $('code-edit').textContent='Edit';
   $('code-edit').setAttribute('aria-pressed',String(codeMode==='edit'));
   $('code-edit').setAttribute('aria-label','Edit');
 
-  $('view-toggle').hidden=!!filePreview || (!!pdfDocument && !pdfDocument.main) || (codeFile && !pdfDocument && !(isLatex(fileName) && linkedPdf?.root===project?.rootPath));$('diff-labels').hidden=codeMode!=='changes';
+  $('view-toggle').hidden=!!filePreview || (!!pdfDocument && !pdfDocument.main) || (codeFile && !pdfDocument && !pdfSource);$('diff-labels').hidden=codeMode!=='changes';
   $('comment').disabled=!fileName || !!(filePreview && filePreview.kind!=='word') || codeMode==='changes';
 }
+function isLinkedPdfSource(){return isLatex(fileName) && !!linkedPdf && !!project?.rootPath && linkedPdf.root===project.rootPath && linkedPdf.sourcePath===`${project.rootPath.replace(/\/$/,'')}/${fileName}`;}
 function markdownOptions(currentPath){
   const selected=project;
   function paths(nodes){return nodes.flatMap(n=>n.type==='directory'?paths(n.children):[n.path]);}
@@ -456,7 +458,7 @@ function render() {
   if(pdfDocument){if($('document').querySelector('.cm-editor'))codeEditor.destroy();mapping=null;$('document').contentEditable='false';$('view-toggle').textContent='View source';pdfViewer.show(pdfDocument,visible);return;}
   const editorMode=codeFile || mode==='source' || codeMode==='edit' || codeMode==='changes';
   if($('document').contentEditable!=='false')$('document').contentEditable='false';
-  if(editorMode){mapping=null;codeEditor.show({name:fileName,text:source,original:diskSource,mode:codeMode,items:visible,live:isMarkdown(fileName) && mode==='rendered' && codeMode==='edit',markdownOptions:markdownOptions(fileName)});$('view-toggle').textContent=isLatex(fileName) && linkedPdf?.root===project?.rootPath?'View PDF':mode==='source'?'Preview':'View source';return;}
+  if(editorMode){mapping=null;codeEditor.show({name:fileName,text:source,original:diskSource,mode:codeMode,items:visible,live:isMarkdown(fileName) && mode==='rendered' && codeMode==='edit',markdownOptions:markdownOptions(fileName)});$('view-toggle').textContent=isLinkedPdfSource()?'View PDF':mode==='source'?'Preview':'View source';return;}
   codeEditor.destroy();
   mapping = renderMarkdown($('document'),source,mode,visible,markdownOptions(fileName));
   $('document').contentEditable=codeMode==='edit'?'true':'false';
@@ -705,7 +707,7 @@ $('document').addEventListener('paste',e=>{if(!$('document').querySelector('.cm-
 }});
 $('document').addEventListener('cut',e=>{if(!$('document').querySelector('.cm-editor') && !pdfDocument && !codeFile && mode==='rendered' && codeMode==='edit'){const selection=window.getSelection();e.preventDefault();e.clipboardData.setData('text/plain',selection?.toString() || '');renderedReplace(renderedSpan(),'');}});
 $('document').addEventListener('drop',e=>{if(!pdfDocument && !codeFile && mode==='rendered' && codeMode==='edit')e.preventDefault();});
-$('view-toggle').addEventListener('click',() => {if(pdfDocument){openPdfSource();return;}if(isLatex(fileName) && linkedPdf?.root===project?.rootPath){openProjectFile(linkedPdf.path);return;}editHistory.boundary();close();mode = mode === 'source' ? 'rendered' : 'source';render();focusEditingDocument();});
+$('view-toggle').addEventListener('click',() => {if(pdfDocument){openPdfSource();return;}if(isLinkedPdfSource()){openProjectFile(linkedPdf.path);return;}editHistory.boundary();close();mode = mode === 'source' ? 'rendered' : 'source';render();focusEditingDocument();});
 for (const value of ['comment','explanation']) $(`kind-${value}`).addEventListener('click',() => {
   setKind(value);if (value === 'comment') $('message').focus({preventScroll:true});else $('kind-explanation').focus({preventScroll:true});
 });
@@ -958,7 +960,12 @@ async function openPdfSource(){
   if(!pdfDocument?.main)return;
   const data=pdfDocument,selection=pending,generation=incomingRevision;let target=data.main,line;
   if(selection?.pdf){try{const location=await serverData('locate_latex_pdf_selection',{root:data.root,path:data.path,selection:{...selection.pdf,startOffset:selection.startOffset,quote:selection.selectedText}});if(location.status==='located'){target=location.path;line=location.line;}}catch(error){showPdfError(error);return;}}
-  if(generation===incomingRevision && pdfDocument===data)await openProjectFile(target,line);
+  if(generation===incomingRevision && pdfDocument===data){
+    const previous=linkedPdf,sourcePath=`${data.root.replace(/\/$/,'')}/${target}`;
+    linkedPdf={root:data.root,path:data.path,main:data.main,sourcePath};
+    await openProjectFile(target,line);
+    if(activeProjectPath!==target && linkedPdf?.sourcePath===sourcePath)linkedPdf=previous;
+  }
 }
 function pdfNeedsRefresh(error){return /project is no longer available|could not refresh project access|PDF (?:version )?(?:changed|is changing)|ENOENT|no such file/i.test(error.message);}
 function clearPdfRefresh(){pdfRefreshTarget=null;$('pdf-refresh').hidden=true;$('pdf-refresh').disabled=false;$('pdf-refresh').querySelector('span').textContent='Refresh preview';}
@@ -1091,9 +1098,10 @@ function updateLayout(){
   document.documentElement.style.setProperty("--panel-top",`${document.querySelector("header").getBoundingClientRect().height}px`);
   const tree=document.body.classList.contains('project-open')?parseFloat(document.documentElement.style.getPropertyValue('--tree-width'))||280:0;
   const comments=!document.body.classList.contains('split-open') && document.body.classList.contains('comments-open')?commentsWidth():0;
-  document.body.classList.toggle('pdf-layout',!!pdfDocument);$('width-mode').hidden=!!pdfDocument;
-  const sourceView=isSourceView();$('wrap-lines').hidden=!sourceView;$('wrap-lines').disabled=!sourceView;
-  document.body.dataset.treeSide=treeSide;document.body.classList.toggle('full-width',fullWidth);document.body.classList.toggle('wrap-lines',sourceView && wrapLines);
+  const patchOpen=document.body.classList.contains('patch-review-open');
+  document.body.classList.toggle('pdf-layout',!!pdfDocument);$('width-mode').hidden=!!pdfDocument && !patchOpen;
+  const sourceView=isSourceView();$('wrap-lines').hidden=!sourceView && !patchOpen;$('wrap-lines').disabled=!sourceView && !patchOpen;
+  document.body.dataset.treeSide=treeSide;document.body.classList.toggle('full-width',fullWidth);document.body.classList.toggle('wrap-lines',(sourceView || patchOpen) && wrapLines);
   const nav=navigationOpen && (!!pdfDocument || isMarkdown(fileName))?outlineWidth():0;
   document.documentElement.style.setProperty('--pdf-canvas-width',`${Math.max(100,viewWidth()-tree-nav-48)}px`);
   document.documentElement.style.setProperty('--nav-left',`${treeSide==='left'?tree:0}px`);
@@ -1112,13 +1120,13 @@ function updateLayout(){
   if(treeSide==='left'){if(toolbar.firstElementChild!==toggle)toolbar.prepend(toggle);}else if(toolbar.lastElementChild!==toggle)toolbar.append(toggle);
 }
 $('width-mode').addEventListener('click',()=>{fullWidth=!fullWidth;localStorage.setItem('markatlas:full-width',String(fullWidth));updateLayout();requestAnimationFrame(positionComposer);});
-$('wrap-lines').addEventListener('click',()=>{
-  if(!isSourceView())return;
-  wrapLines=!wrapLines;updateLayout();codeEditor.setLineWrapping(wrapLines);
+function toggleWrapLines(){
+  wrapLines=!wrapLines;updateLayout();codeEditor.setLineWrapping(wrapLines);patchReview.syncWrap();
   requestAnimationFrame(()=>{codeEditor.measure();positionComposer();});
   try{localStorage.setItem('markatlas:wrap-lines',String(wrapLines));}catch{}
-});
-$('mode-cycle').addEventListener('click',()=>{if(pdfDocument){openPdfSource();return;}preserveViewport(()=>{
+}
+$('wrap-lines').addEventListener('click',()=>{if(isSourceView() || document.body.classList.contains('patch-review-open'))toggleWrapLines();});
+$('mode-cycle').addEventListener('click',()=>{if(pdfDocument){openPdfSource();return;}if(isLinkedPdfSource()){openProjectFile(linkedPdf.path);return;}preserveViewport(()=>{
   close();editHistory.boundary();
   if(isMarkdown(fileName)){
     if(mode==='source'){mode='rendered';codeMode='review';}

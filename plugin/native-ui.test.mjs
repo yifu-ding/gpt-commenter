@@ -16,6 +16,7 @@ window.apiCalls=[];window.api=async(name,args)=>{window.apiCalls.push({name,args
  if(name==='save_review_project_file'){window.files[args.path]=args.text;return {text:args.text,etag:'2'};}
  if(name==='review_project_state' && args.state){if(window.failProjectSave)throw Error('Disk unavailable');window.savedProjectState=args.state;if(window.onProjectSave){const callback=window.onProjectSave;window.onProjectSave=null;callback();}}
  if(name==='read_latex_pdf'){if(window.pdfReadGate)await window.pdfReadGate;if(window.pdfReadError)throw Error(window.pdfReadError);return window.pdfSnapshot && args.ifNoneMatch!==window.pdfSnapshot.etag?window.pdfSnapshot:{notModified:true};}
+ if(name==='locate_latex_pdf_selection')return {status:'located',path:'chapters/results.tex',line:2};
  if(name==='render_latex_pdf_page')return {image:'data:image/png;base64,AA=='};
  if(name==='review_project_state')return {entries:[],drafts:{},saved:true};
  if(name==='update_review_document')return {documentId:'test'};
@@ -24,7 +25,7 @@ window.apiCalls=[];window.api=async(name,args)=>{window.apiCalls.push({name,args
 };
 let source=readFileSync(new URL('./src/viewer.js',import.meta.url),'utf8').replace("import {App} from '@modelcontextprotocol/ext-apps';",`class App {addEventListener(){} async connect(){} getHostContext(){return {theme:'light'};}async callServerTool({name,arguments:args}){return {structuredContent:await window.api(name,args)};}}`).replace("import {OpenAIExtensions, OpenAIFileEntrypointInputSchema} from '@openai/mcp-extensions/app';",`class OpenAIExtensions {} const OpenAIFileEntrypointInputSchema={safeParse:()=>({success:false})};`);
 window.localStorage.setItem('markatlas:recent-projects:v1',JSON.stringify(['/previous']));
-source+=`\nwindow.testUI={checkPdf,refreshPdfPreview,setPdf(data){clearPdfRefresh();pdfDocument=data;clearTimeout(pdfPoll);},open,close,render,setNotes(value){items=value;render();},applyWorkingText,flushPane,renderProjectTree,renderRecentRoots,openProjectFile,splitView,locateReviewEntry,get:()=>({mode,codeMode,fileName,source,pdfDocument}),seed(entry){batchEntries.set(entry.item.id,entry);renderBatch();}};`;
+source+=`\nwindow.testUI={checkPdf,refreshPdfPreview,setPdf(data){clearPdfRefresh();pdfDocument=data;clearTimeout(pdfPoll);},setPending(value){pending=value;},open,close,render,setNotes(value){items=value;render();},applyWorkingText,flushPane,renderProjectTree,renderRecentRoots,openProjectFile,splitView,locateReviewEntry,get:()=>({mode,codeMode,fileName,source,pdfDocument,activeProjectPath}),seed(entry){batchEntries.set(entry.item.id,entry);renderBatch();}};`;
 const bundle=await build({stdin:{contents:source,resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false});window.eval(bundle.outputFiles[0].text);
 const $=id=>window.document.getElementById(id);const until=async fn=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,5));}assert.ok(fn(),'UI settled');};
 assert.match($('recent-projects').textContent,/Recently opened/);
@@ -68,6 +69,7 @@ const split=window.testUI.splitView,opening=split.open('/demo','folder/beta.md')
 const frame=window.document.querySelector('#secondary-pane iframe');frame.contentWindow.postMessage=data=>{if(data.id){window.paneCalls.push(data);queueMicrotask(()=>window.dispatchEvent(new window.MessageEvent('message',{source:frame.contentWindow,data:{markatlasPane:window.paneConfig.token,reply:data.id,value:true}})));}};
 function peer(method,value){window.dispatchEvent(new window.MessageEvent('message',{source:frame.contentWindow,data:{markatlasPane:window.paneConfig.token,id:1000,method,value}}));}
 peer('ready');await opening;assert.equal(window.getComputedStyle(window.document.querySelector('.pane-bar')).display,'none');assert.equal($('review-batch').parentElement,window.document.body);assert.ok($('comments-toggle').closest('.toolbar-actions'));assert.equal($('shared-comments-toggle'),null);
+assert.equal($('wrap-lines').parentElement,$('width-mode').parentElement);assert.equal($('width-mode').nextElementSibling,$('wrap-lines'),'line wrapping belongs beside document width in the top toolbar');
 const entry={root:'/demo',path:'folder/beta.md',identity:'project:/demo/folder/beta.md',item:{id:'test-note',kind:'comment',message:'Check beta',selectedText:'Search',startOffset:8,endOffset:14,startLine:3,endLine:3}};
 window.testUI.seed(entry);peer('focus');assert.equal(split.activePane(),'secondary');$('comments-toggle').dispatchEvent(new window.Event('pointerdown',{bubbles:true}));$('comments-toggle').focus();assert.equal(split.activePane(),'secondary');$('comments-toggle').click();$('review-list').querySelector('.review-row').click();await until(()=>window.paneCalls.some(call=>call.method==='locateReview'));assert.equal(window.testUI.get().fileName,'alpha.md','right-focused annotation leaves left unchanged');
 $('document').dispatchEvent(new window.Event('pointerdown',{bubbles:true}));assert.equal(split.activePane(),'primary');$('review-list').querySelector('.review-row').click();await until(()=>window.testUI.get().fileName==='folder/beta.md');assert.equal(window.paneCalls.filter(call=>call.method==='locateReview').length,1,'left-focused annotation does not route right');
@@ -90,4 +92,17 @@ window.pdfSnapshot=pdfVersion('newer');await window.testUI.checkPdf();assert.equ
 window.pdfReadError='PDF is changing. Waiting for the external build to finish.';await window.testUI.refreshPdfPreview();assert.equal($('pdf-refresh').hidden,false);assert.equal($('pdf-refresh').disabled,false);assert.equal($('code-error').hidden,true);assert.equal(window.testUI.get().pdfDocument.fingerprint,'new','a failed refresh retains the existing document');
 window.pdfReadError=null;await window.testUI.refreshPdfPreview();assert.equal(window.testUI.get().pdfDocument.fingerprint,'newer');assert.equal($('pdf-refresh').hidden,true);
 window.testUI.setPdf(null);
+window.files['main.tex']='\\documentclass{article}\n\\begin{document}\n\\input{chapters/results}\n\\end{document}';
+window.files['chapters/results.tex']='\\section{Results}\nUpdated passage';
+window.files['other.tex']='Unrelated source';
+window.pdfSnapshot={...pdfVersion('linked'),root:'/demo',path:'thesis.pdf',sourcePath:'/demo/thesis.pdf',main:'main.tex'};
+await window.testUI.openProjectFile('thesis.pdf');assert.equal(window.testUI.get().fileName,'thesis.pdf');
+window.testUI.setPending(null);$('mode-cycle').click();await until(()=>window.testUI.get().activeProjectPath==='main.tex');
+assert.equal($('mode-cycle').getAttribute('aria-label'),'Preview');assert.equal($('mode-cycle').disabled,false);
+$('mode-cycle').click();await until(()=>window.testUI.get().pdfDocument?.path==='thesis.pdf');
+window.testUI.setPending({pdf:{page:1,x:10,y:10,fingerprint:'linked'},startOffset:0,selectedText:'Updated passage'});
+$('mode-cycle').click();await until(()=>window.testUI.get().activeProjectPath==='chapters/results.tex');
+assert.equal($('mode-cycle').getAttribute('aria-label'),'Preview','a SyncTeX chapter can return to its PDF');
+await window.testUI.openProjectFile('other.tex');assert.equal($('mode-cycle').disabled,true,'unrelated LaTeX files have no PDF return link');
+await window.testUI.openProjectFile('chapters/results.tex');$('mode-cycle').click();await until(()=>window.testUI.get().pdfDocument?.path==='thesis.pdf');
 dom.window.close();console.log('Native UI: three-mode Markdown and read-only Preview, breadcrumb folders, masked search/line navigation, shared comments, focused-pane routing, close-left promotion and close-last passed');
