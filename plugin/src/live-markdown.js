@@ -45,7 +45,7 @@ export function moveLiveLine(view,forward,extend=false){
  view.dispatch({selection:extend?EditorSelection.range(selection.anchor,head):EditorSelection.cursor(head),effects:revealBlock.of(head),scrollIntoView:true,userEvent:'select'});return true;
 }
 export function liveMarkdown(options={}){
- const previewPositions=new WeakMap();
+ const previewPositions=new WeakMap(),previewMappings=new WeakMap();
  const interactive=target=>target.closest?.('a,button,input,summary,[data-annotation]');
  function positionAt(view,event){
   const doc=view.dom.ownerDocument,point=doc.caretPositionFromPoint?.(event.clientX,event.clientY);
@@ -77,13 +77,26 @@ export function liveMarkdown(options={}){
   constructor(unit,notes){super();this.unit=unit;this.notes=notes;}
   eq(other){return JSON.stringify(other.unit)===JSON.stringify(this.unit) && JSON.stringify(other.notes)===JSON.stringify(this.notes);}
   get estimatedHeight(){return this.unit.kind==='separator'?0:-1;}
+  setPosition(node,mapping){
+   const unit=this.unit;node.dataset.sourceFrom=unit.from;node.dataset.sourceTo=unit.to;
+   const sourceOffset=offset=>unit.sourceOffsets?.[offset]??unit.renderFrom+offset;
+   previewPositions.set(node,range=>{
+    const span=mapping.resolve(range);
+    return span?Math.max(unit.from,Math.min(unit.to,sourceOffset(span.startOffset))):unit.from;
+   });
+  }
+  updateDOM(node,_view,from){
+   if(this.unit.kind!=='html' || from.unit.kind!=='html' || this.unit.text!==from.unit.text || JSON.stringify(this.notes)!==JSON.stringify(from.notes))return false;
+   const mapping=previewMappings.get(node);if(!mapping)return false;
+   this.setPosition(node,mapping);return true;
+  }
   toDOM(view){
    const unit=this.unit,node=document.createElement('div');node.className='cm-markdown-preview';node.dataset.sourceFrom=unit.from;node.dataset.sourceTo=unit.to;
    if(unit.kind==='separator'){node.style.display='none';return node;}
    if(unit.kind==='list' || unit.kind==='list-code'){node.classList.add('cm-markdown-list-line');node.style.paddingLeft=`calc(4px + ${unit.depth*2+(unit.kind==='list-code'?1.5:0)}em)`;}
-   const sourceOffset=offset=>unit.sourceOffsets?.[offset]??unit.renderFrom+offset;
    const renderedOffset=offset=>{if(!unit.sourceOffsets)return offset-unit.renderFrom;const index=unit.sourceOffsets.findIndex(value=>value>=offset);return index<0?unit.text.length:index;};
    const mapping=renderMarkdown(node,unit.text,'rendered',this.notes.map(note=>({...note,startOffset:Math.max(0,renderedOffset(note.startOffset)),endOffset:Math.min(unit.text.length,renderedOffset(note.endOffset))})),{...options,toggleTask:options.toggleTask?(offset,state,expected)=>options.toggleTask(offset+unit.renderFrom,state,expected):undefined});
+   previewMappings.set(node,mapping);
    if(node.querySelector('.katex-display'))node.classList.add('cm-markdown-math');
    if(unit.kind==='table-row')node.querySelector('thead')?.remove();
    if(unit.kind.startsWith('table')){
@@ -92,10 +105,7 @@ export function liveMarkdown(options={}){
 
    }
    if(unit.kind==='list' || unit.kind==='list-code')for(let level=0;level<unit.depth;level++){const guide=document.createElement('span');guide.className='cm-list-indent-guide';guide.setAttribute('aria-hidden','true');guide.style.left=`calc(4px + ${level*2+.5}em)`;node.append(guide);}
-   previewPositions.set(node,range=>{
-    const span=mapping.resolve(range);
-    return span?Math.max(unit.from,Math.min(unit.to,sourceOffset(span.startOffset))):unit.from;
-   });return node;
+   this.setPosition(node,mapping);return node;
   }
   ignoreEvent(event){return event.type!=='mousedown' || event.button!==0 || !!interactive(event.target);}
  }

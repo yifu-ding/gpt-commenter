@@ -31,6 +31,26 @@ try{
  await assert.rejects(store.create({root,path:a.path,baseText:a.baseText,proposedText:'old'}),/Source changed/);
  await mkdir(join(root,'blocked'));await writeFile(join(root,'blocked/file.md'),'A');await symlink(join(root,'chapters/.markatlas'),join(root,'blocked/.markatlas'));
  await assert.rejects(store.create({root,path:'blocked/file.md',baseText:'A',proposedText:'B'}),/real directory/);
+ // A separate MCP process has no viewer registrations (and roots may be offline).
+ const disconnected=workspaceAccess(async()=>{throw Error('Host roots unavailable');},null);
+ const detachedStore=patchStore(disconnected,{});
+ const detached=await detachedStore.create({root,path:'chapters/a.tex',baseText:'First\nClearer\n',proposedText:'Saved while closed\n'});
+ assert.equal(await readFile(join(root,detached.path),'utf8'),detached.baseText);
+ assert.ok((await readdir(join(root,'chapters/.markatlas/patches'))).includes(detached.id+'.json'));
+ const revised=await detachedStore.update({root,path:detached.path,id:detached.id,expectedRevision:1,comment:{message:'Keep this across restarts'}});
+ const restarted=patchStore(workspaceAccess(async()=>[],null),{});
+ assert.equal((await restarted.read(root,detached.path,detached.id)).comments[0].message,'Keep this across restarts');
+ assert.ok((await restarted.list(root,detached.path)).patches.some(p=>p.id===detached.id));
+ // Opening the source directory directly, then its enclosing project, finds the same cache.
+ const nestedRoot=join(root,'chapters');
+ assert.equal((await restarted.read(nestedRoot,'a.tex',detached.id)).path,'a.tex');
+ assert.ok((await restarted.list(nestedRoot,'a.tex')).patches.some(p=>p.id===detached.id));
+ await assert.rejects(restarted.apply({root,path:detached.path,id:detached.id,expectedRevision:revised.revision}),/Project is no longer available/);
+ assert.equal(await readFile(join(root,detached.path),'utf8'),detached.baseText);
+ await assert.rejects(restarted.create({root:nestedRoot,path:'../main.tex',baseText:'',proposedText:'escape'}),/outside the project/);
+ await symlink(join(root,'main.tex'),join(nestedRoot,'escape.tex'));
+ await assert.rejects(restarted.create({root:nestedRoot,path:'escape.tex',baseText:'',proposedText:'escape'}),/outside the project/);
+ await assert.rejects(restarted.create({root,path:detached.path,baseText:'stale',proposedText:'stale proposal'}),/Source changed/);
  // Verify the exported artifacts are real unified patches, including EOF and empty-file edges.
  for(const [before,after] of [['a\nb\nc\n','a\nB\nc\n'],['','new\n'],['old\n',''],['a','b'],['a\n','a'],['a','a\n'],['a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n','A\nb\nc\nd\ne\nf\ng\nh\ni\nJ\n']]){
   await writeFile(join(root,'sample.txt'),before);const patch=patchDiff('sample.txt',before,after);const result=spawnSync('git',['apply','--no-index','-'],{cwd:root,input:patch,encoding:'utf8'});assert.equal(result.status,0,patch+'\n'+result.stderr);assert.equal(await readFile(join(root,'sample.txt'),'utf8'),after);

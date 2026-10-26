@@ -18,7 +18,7 @@ import {yaml} from '@codemirror/legacy-modes/mode/yaml';
 import {githubLight} from '@uiw/codemirror-theme-github';
 import {liveMarkdown,liveNotes,revealBlock} from './live-markdown.js';
 import {EditorView,basicSetup} from 'codemirror';
-import {EditorState,StateEffect,StateField,Prec} from '@codemirror/state';
+import {Compartment,EditorState,StateEffect,StateField,Prec} from '@codemirror/state';
 import {Decoration,keymap} from '@codemirror/view';
 import {MergeView} from '@codemirror/merge';
 import {javascript} from '@codemirror/lang-javascript';
@@ -69,6 +69,8 @@ const theme=EditorView.theme({
 });
 export function createCodeEditor(container,{onChange,onSelection,onNote,onSave,onPasteImage,onError=()=>{}}) {
   let current=null,key='',lastOriginal='',noteItems=[],markdownBottomClick=false;
+  let wrapLines=false;
+  const wrapping=new Compartment();
   const menu=document.createElement('div');menu.className='markdown-insert-menu';menu.setAttribute('role','menu');menu.setAttribute('aria-label','Insert Markdown');menu.hidden=true;document.body.append(menu);
   for(const [action,{label}] of Object.entries(markdownActions)){const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=label;button.addEventListener('mousedown',event=>event.preventDefault());button.addEventListener('click',()=>{menu.hidden=true;if(current instanceof EditorView)insertMarkdownAction(current,action);});menu.append(button);}
   const closeMenu=event=>{if(!menu.contains(event.target))menu.hidden=true;};document.addEventListener('pointerdown',closeMenu);
@@ -85,7 +87,7 @@ export function createCodeEditor(container,{onChange,onSelection,onNote,onSave,o
   function destroy(){menu.hidden=true;current?.destroy();current=null;key='';container.replaceChildren();}
   function marks(items){noteItems=items;const ranges=[];for(const item of items){if(item.pdf?.region || item.startOffset<0 || item.endOffset<=item.startOffset || item.endOffset>current.state.doc.length)continue;ranges.push(Decoration.mark({class:item.temporary?'cm-review-note pending-selection':'cm-review-note',attributes:item.temporary?{}:{'data-annotation':item.id,'data-note-kind':item.kind,role:'button',tabindex:'0','aria-label':`Review note on lines ${item.startLine}–${item.endLine}`},inclusiveEnd:true}).range(item.startOffset,item.endOffset));}return Decoration.set(ranges,true);}
   const notes=StateField.define({create:()=>Decoration.none,update(value,tr){for(const effect of tr.effects)if(effect.is(notesEffect))return marks(effect.value);return value.map(tr.changes);},provide:field=>EditorView.decorations.from(field)});
-  function extensions(name,readOnly,review){return [basicSetup,githubLight,theme,language(name),indentUnit.of('    '),EditorState.tabSize.of(4),Prec.highest(keymap.of([{key:'Tab',run:insertIndent,shift:indentLess},{key:'Mod-[',run:indentLess},{key:'Mod-]',run:indentMore}])),...(!readOnly && /\.(md|markdown)$/i.test(name)?markdownShortcuts():[]),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),keymap.of([{key:'Mod-s',run:()=>{onSave();return true;}}]),...(review?[notes]:[])];}
+  function extensions(name,readOnly,review){return [basicSetup,githubLight,theme,wrapping.of(wrapLines?EditorView.lineWrapping:[]),language(name),indentUnit.of('    '),EditorState.tabSize.of(4),Prec.highest(keymap.of([{key:'Tab',run:insertIndent,shift:indentLess},{key:'Mod-[',run:indentLess},{key:'Mod-]',run:indentMore}])),...(!readOnly && /\.(md|markdown)$/i.test(name)?markdownShortcuts():[]),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),keymap.of([{key:'Mod-s',run:()=>{onSave();return true;}}]),...(review?[notes]:[])];}
   return {
     show({name,text,original,mode,items=[],live=false,markdownOptions={}}) {
       markdownBottomClick=mode==='edit' && live && /\.(md|markdown)$/i.test(name);
@@ -102,6 +104,12 @@ export function createCodeEditor(container,{onChange,onSelection,onNote,onSave,o
       if(mode!=='changes')current.dispatch({effects:[notesEffect.of(items),liveNotes.of(items)]});
     },
     destroy,
+    setLineWrapping(enabled){
+      wrapLines=enabled;
+      const effect=wrapping.reconfigure(enabled?EditorView.lineWrapping:[]);
+      if(current instanceof EditorView)current.dispatch({effects:effect});
+      else if(current){current.a.dispatch({effects:effect});current.b.dispatch({effects:effect});}
+    },
     setNotes(items){if(current instanceof EditorView)current.dispatch({effects:[notesEffect.of(items),liveNotes.of(items)]});},
     clearSelection(){if(current instanceof EditorView)current.dispatch({selection:{anchor:current.state.selection.main.head}});},
     capture(){return current instanceof EditorView?{selection:current.state.selection,top:current.scrollDOM.scrollTop,left:current.scrollDOM.scrollLeft}:null;},

@@ -52,7 +52,9 @@ const toolbarPaths={
   source:'<path d="m8 5-6 7 6 7m8-14 6 7-6 7m-3-15-2 16"/>',
   edit:'<path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m13 6 5 5"/>',
   wide:'<path d="M3 4v16M21 4v16M4 12h16m-12-4-4 4 4 4m8-8 4 4-4 4"/>',
-  readable:'<path d="M6 4v16M18 4v16M9 7h6M9 11h6M9 15h6"/>'
+  readable:'<path d="M6 4v16M18 4v16M9 7h6M9 11h6M9 15h6"/>',
+  wrap:'<path d="M4 4v16M8 8h12v5a4 4 0 0 1-4 4h-7m3-3-3 3 3 3"/>',
+  nowrap:'<path d="M4 4v16M8 8h8M8 12h8M8 16h8m1-7 4 3-4 3"/>'
 };
 function toolbarIcon(id,label,icon){const button=$(id);button.innerHTML=`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${toolbarPaths[icon]}</svg>`;button.title=label;button.setAttribute('aria-label',label);}
 for(const [id,label,icon] of [['document-nav-toggle','Outline','outline'],['comments-toggle','Comments','comments'],['tree-toggle','Files','files'],['mode-cycle','Preview','preview']])toolbarIcon(id,label,icon);
@@ -323,6 +325,7 @@ const codeEditor=createCodeEditor($('document'),{
   onPasteImage:pasteMarkdownImage,
   onError(error){$('code-error').hidden=false;$('code-error').textContent=`Could not paste image: ${error.message}`;}
 });
+codeEditor.setLineWrapping(localStorage.getItem('markatlas:wrap-lines')==='true');
 async function pasteMarkdownImage(file){
   if(!file)throw Error('No image was found on the clipboard.');
   if(file.size>20*1024*1024)throw Error('Images must be under 20 MB.');
@@ -1074,13 +1077,14 @@ function finishOutlineDrag(event){if(!outlineDrag || event.pointerId!==outlineDr
 window.addEventListener('pointerup',finishOutlineDrag);window.addEventListener('pointercancel',finishOutlineDrag);
 outlineHandle.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const {min,max}=outlineWidthBounds();resizeOutline(event.key==='Home'?min:event.key==='End'?max:outlineWidth()+(event.key==='ArrowRight'?1:-1)*(outlineSide==='left'?16:-16));saveOutlineWidth();});
 let fullWidth=localStorage.getItem('markatlas:full-width')==='true';
+let wrapLines=localStorage.getItem('markatlas:wrap-lines')==='true';
 function updateLayout(){
   document.body.classList.toggle('pane-narrow',viewWidth()<900);fitBreadcrumb(document.querySelector('.breadcrumb'));
   document.documentElement.style.setProperty("--panel-top",`${document.querySelector("header").getBoundingClientRect().height}px`);
   const tree=document.body.classList.contains('project-open')?parseFloat(document.documentElement.style.getPropertyValue('--tree-width'))||280:0;
   const comments=!document.body.classList.contains('split-open') && document.body.classList.contains('comments-open')?commentsWidth():0;
-  document.body.classList.toggle('pdf-layout',!!pdfDocument);$('width-mode').hidden=!!pdfDocument;
-  document.body.dataset.treeSide=treeSide;document.body.classList.toggle('full-width',fullWidth);
+  document.body.classList.toggle('pdf-layout',!!pdfDocument);$('width-mode').hidden=!!pdfDocument;$('wrap-lines').hidden=!!pdfDocument || !!filePreview;
+  document.body.dataset.treeSide=treeSide;document.body.classList.toggle('full-width',fullWidth);document.body.classList.toggle('wrap-lines',wrapLines);
   const nav=navigationOpen && (!!pdfDocument || isMarkdown(fileName))?outlineWidth():0;
   document.documentElement.style.setProperty('--pdf-canvas-width',`${Math.max(100,viewWidth()-tree-nav-48)}px`);
   document.documentElement.style.setProperty('--nav-left',`${treeSide==='left'?tree:0}px`);
@@ -1093,10 +1097,13 @@ function updateLayout(){
   document.documentElement.style.setProperty('--comments-space',`${comments}px`);
   commentsHandle.hidden=!!paneConfig || !comments;const bounds=commentsWidthBounds();commentsHandle.setAttribute('aria-valuemin',bounds.min);commentsHandle.setAttribute('aria-valuemax',bounds.max);commentsHandle.setAttribute('aria-valuenow',commentsWidth());
   toolbarIcon('width-mode',fullWidth?'Full Width':'Readable',fullWidth?'wide':'readable');
+  toolbarIcon('wrap-lines',wrapLines?'Wrap lines':'No wrap',wrapLines?'wrap':'nowrap');
+  $('wrap-lines').setAttribute('aria-pressed',String(wrapLines));
   const toolbar=document.querySelector('.toolbar'),toggle=$('tree-toggle');
   if(treeSide==='left'){if(toolbar.firstElementChild!==toggle)toolbar.prepend(toggle);}else if(toolbar.lastElementChild!==toggle)toolbar.append(toggle);
 }
 $('width-mode').addEventListener('click',()=>{fullWidth=!fullWidth;localStorage.setItem('markatlas:full-width',String(fullWidth));updateLayout();requestAnimationFrame(positionComposer);});
+$('wrap-lines').addEventListener('click',()=>{wrapLines=!wrapLines;localStorage.setItem('markatlas:wrap-lines',String(wrapLines));codeEditor.setLineWrapping(wrapLines);updateLayout();requestAnimationFrame(positionComposer);});
 $('mode-cycle').addEventListener('click',()=>{if(pdfDocument){openPdfSource();return;}preserveViewport(()=>{
   close();editHistory.boundary();
   if(isMarkdown(fileName)){

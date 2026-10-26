@@ -38,6 +38,12 @@ $('mode-cycle').click();assert.equal($('mode-cycle').getAttribute('aria-label'),
 assert.equal(window.document.body.dataset.treeSide,'left');
 assert.equal($('file-find'),null);assert.equal($('file-search'),null);$('project-search-toggle').click();assert.equal($('project-search-overlay').hidden,false);$('project-search-close').click();assert.equal($('project-search-overlay').hidden,true);
 $('width-mode').click();assert.equal(window.document.body.classList.contains('full-width'),true);$('width-mode').click();
+assert.equal($('wrap-lines').getAttribute('aria-pressed'),'false');
+$('wrap-lines').click();assert.equal(window.document.body.classList.contains('wrap-lines'),true);assert.equal(window.localStorage.getItem('markatlas:wrap-lines'),'true');
+$('mode-cycle').click();assert.equal($('document').querySelector('.cm-content').classList.contains('cm-lineWrapping'),true);
+$('mode-cycle').click();assert.equal($('document').querySelector('.cm-content').classList.contains('cm-lineWrapping'),true,'source mode wraps');
+$('wrap-lines').click();assert.equal($('document').querySelector('.cm-content').classList.contains('cm-lineWrapping'),false);
+$('mode-cycle').click();
 $('comments-toggle').click();assert.equal($('review-batch').hidden,false);assert.equal($('project-drawer').hidden,false,'both sidebars coexist');
 $('tree-toggle').click();assert.equal(window.document.body.classList.contains('comments-open'),true);$('tree-toggle').click();$('comments-toggle').click();
 const resizeHandle=$('tree-resize');
@@ -294,6 +300,8 @@ assert.equal($('project-drawer').hidden,false,'opening a file keeps the tree ope
 assert.equal($('mode-cycle').disabled,true);assert.equal($('view-toggle').hidden,true);assert.equal($('code-edit').textContent,'Edit');assert.equal($('code-edit').getAttribute('aria-pressed'),'true');assert.equal($('code-save'),null);assert.equal($('code-discard'),null);
 let code=CMView.findFromDOM($('document').querySelector('.cm-editor'));
 assert.equal(code.state.readOnly,false);assert.equal(code.state.doc.toString(),'const value = 1;\n');
+$('wrap-lines').click();assert.equal(code.contentDOM.classList.contains('cm-lineWrapping'),true,'code files wrap without rebuilding the editor');
+$('wrap-lines').click();assert.equal(code.contentDOM.classList.contains('cm-lineWrapping'),false,'code files return to single lines');
 $('code-edit').click();code=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.equal(code.state.readOnly,true);assert.equal($('code-edit').getAttribute('aria-pressed'),'false');
 $('code-edit').click();code=CMView.findFromDOM($('document').querySelector('.cm-editor'));assert.equal(code.state.readOnly,false);
 

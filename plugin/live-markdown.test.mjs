@@ -29,6 +29,22 @@ view.destroy();
  assert.ok(display.closest('.cm-markdown-math'),'display equation has a non-scrolling preview container');
  editor.destroy();
 }
+{
+ const html='<p align="center">\n  <img src="plugin/assets/icon.svg" width="64" height="64" alt="MarkAtlas icon">\n</p>';
+ let loads=0;
+ const editor=new EditorView({parent:document.querySelector('main'),state:EditorState.create({doc:`Before\n\n${html}\n\nAfter`,extensions:liveMarkdown({resolveEmbed:async()=>{loads++;return {kind:'image',url:'data:image/svg+xml;base64,PHN2Zy8+'};}})})});
+ const imageBlock=()=>[...editor.dom.querySelectorAll('.cm-markdown-preview')].find(node=>node.querySelector('img'));
+ const original=imageBlock();assert.ok(original);assert.equal(loads,1);
+ editor.dispatch({changes:{from:0,insert:'New text\n\n'}});
+ assert.equal(imageBlock(),original,'edits before unchanged HTML reuse its DOM');
+ assert.equal(+original.dataset.sourceFrom,editor.state.doc.toString().indexOf('<p'));
+ editor.dispatch({changes:{from:editor.state.doc.length,insert:' suffix'}});
+ assert.equal(imageBlock(),original,'edits after unchanged HTML reuse its DOM');assert.equal(loads,1,'unrelated edits do not reload the image');
+ const width=editor.state.doc.toString().indexOf('width="64"')+7;
+ editor.dispatch({changes:{from:width,to:width+2,insert:'80'}});
+ assert.notEqual(imageBlock(),original,'editing the HTML block rebuilds its preview');assert.equal(imageBlock().querySelector('img').width,80);assert.equal(loads,2);
+ editor.destroy();
+}
 for(const indent of ['\t','  ']){
  const codeText=['- incremental 数据：',indent+'```sh',indent+'/home/dyf/miniconda/envs/qec/bin/python test_result.py '+String.fromCharCode(92),indent+'    --dataset zuchongzhi '+String.fromCharCode(92),indent+'    --figure-name zcz_incremental.png',indent+'```','- 真实数据 加 `--zuchongzhi-mode real`','---'].join('\n');
  const state=EditorState.create({doc:codeText,extensions:liveMarkdown()});const units=markdownPreviewUnits(state.doc),code=units.find(unit=>unit.kind==='list-code');assert.ok(code);assert.equal(units.filter(unit=>unit.kind==='list').length,2);assert.equal(code.text.split('\n').length,5);assert.equal(codeText.slice(code.sourceOffsets[code.text.indexOf('--dataset')],code.sourceOffsets[code.text.indexOf('--dataset')]+9),'--dataset');

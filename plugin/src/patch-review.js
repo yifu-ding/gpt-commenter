@@ -7,7 +7,7 @@ export function createPatchReview({document,call,send,beforeOpen,onApplied,onSel
  const identity=()=>({root:record.root,path:record.path,id:record.id,expectedRevision:record.revision});
  function showAppliedToast(){const toast=$('patch-toast');document.defaultView.clearTimeout(toastTimer);toast.classList.remove('visible');toast.textContent='Patch applied';toast.hidden=false;void toast.offsetWidth;toast.classList.add('visible');toastTimer=document.defaultView.setTimeout(()=>{toast.hidden=true;toast.classList.remove('visible');},2000);}
  function error(e){$('patch-error').textContent=e.message;}
- function close(){onClose();++epoch;record=null;panel.hidden=true;main.classList.remove('patch-open');document.body.classList.remove('patch-review-open');for(const [control,disabled] of disabledStates)control.disabled=disabled;disabledStates.clear();menu.hidden=true;}
+ function close(){if(record)onClose();++epoch;record=null;panel.hidden=true;main.classList.remove('patch-open');document.body.classList.remove('patch-review-open');for(const [control,disabled] of disabledStates)control.disabled=disabled;disabledStates.clear();menu.hidden=true;}
  async function saveDraft(){if(!record)return;const proposed=$('patch-proposed');if(proposed.value!==record.proposedText)record=await call('update_review_patch',{...identity(),proposedText:proposed.value});}
  async function saveComment(selection,message){
   if(busy)throw Error('Please wait for the current patch operation.');
