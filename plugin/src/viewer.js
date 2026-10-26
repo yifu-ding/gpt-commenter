@@ -1224,6 +1224,7 @@ function renderProjectTree() {
   function children(nodes,parent) {
     const list=document.createElement('ul');parent.append(list);
     for(const node of treePreferences.sort(nodes)) {
+      if(node.deleted)continue;
       const row=document.createElement('li');list.append(row);
       if(node.type==='directory') {
         const folder=document.createElement('details'),title=document.createElement('summary');folder.dataset.projectFolder=node.path;folder.open=expanded.has(node.path) || (treeAutoExpand && (node.path===breadcrumbFolder || !!breadcrumbFolder?.startsWith(`${node.path}/`) || !!activeProjectPath?.startsWith(`${node.path}/`)));const label=document.createElement('span');label.className='file-label';label.textContent=node.name;title.append(label);if(viewerPreferences.showGitChanges)appendGitBadge(title,node.git);if(node.path===breadcrumbFolder)title.dataset.breadcrumbActive='true';folder.append(title);row.append(folder);children(node.children,folder);
@@ -1422,6 +1423,10 @@ document.addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&[
 async function openProjectFile(path,sourceLine){
   if(!project)return;
   if(path===activeProjectPath && !sourceLine)return;
+  const find=node=>node.path===path?node:(node.children || []).map(find).find(Boolean);
+  if(find(project.root)?.deleted){
+    $('project-status').hidden=false;$('project-status').textContent=`Cannot open ${path}: This file has been deleted from disk. It is shown only as a Git change.`;return;
+  }
   if(!(await canLeaveFile()))return;
   if(fileHistory[historyIndex])fileHistory[historyIndex].scroll=viewport().scrollTop;
   const selectedProject=project,file=selectedProject.files?.get(path);if(!file && !selectedProject.rootPath)return;

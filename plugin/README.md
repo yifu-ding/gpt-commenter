@@ -124,6 +124,7 @@ Theme color defaults to `host`, using the host-provided semantic accent colors. 
 ### Preview changes and review patches
 
 Select **Preview changes** next to **Send** to ask the assistant to propose changes without writing source files. The assistant uses `create_review_patch` with the exact current source and proposed text; binary files require an editable text source first. Each source folder stores proposals in `.markatlas/patches/` as a JSON record and a unified `.patch` file. Records retain the original source, proposed content, context, comments and revisions.
+Saving and revising proposals does not depend on the project being open in the file tree or registered in the current MCP process. Reopening a file discovers its saved proposals, including when opened from an enclosing project folder. Applying a proposal still requires workspace access and source conflict checks.
 
 **Review patches** appears for files with pending proposals. Multiple proposals open a selector. The document pane shows red deletions and green additions; select diff text to include it in a comment, save comments, or send them for another patch revision. **Edit proposed content** changes only the cached proposal. **Apply patches** writes the selected proposal after checking that both the source and patch revision are unchanged. A stale proposal is rejected instead of overwriting newer edits. Applied records remain in the cache but disappear from the pending list.
 

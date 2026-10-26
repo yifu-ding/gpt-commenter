@@ -50,4 +50,14 @@ window.testUI.applyWorkingText('# Edit after rename');await window.testUI.saveCo
 await window.testUI.renameTreeEntry('notes/beta.md','new.md');assert.equal(window.testUI.get().fileName,'notes/new.md');
 $('project-search-toggle').click();assert.ok($('project-search-overlay').classList.contains('search-empty'));assert.equal($('project-search-results').children.length,0);
 $('project-search-query').value='edited';$('project-search-query').dispatchEvent(new window.Event('input'));await until(()=>!$('project-search-overlay').classList.contains('search-empty'));
-console.log('Rename viewer: open folder descendants, unsaved edits, continued saving and search compact state passed');window.close();
+// Deleted entries from stale tree responses stay hidden and cannot reach disk reads.
+const apiBeforeDeleted=window.api;let deletedReads=0,deletedTreeLoaded=false;
+window.api=async(name,args)=>{
+ if(name==='list_markdown_project'){const tree=await apiBeforeDeleted(name,args);deletedTreeLoaded=true;tree.root.children.push({type:'file',name:'missing.py',path:'missing.py',deleted:true,supported:false,git:{deleted:true,added:0,removed:3}});return tree;}
+ if(args.path==='missing.py'){if(name==='read_markdown_project_file')deletedReads++;throw Error('Deleted path must not reach the server');}
+ return apiBeforeDeleted(name,args);
+};
+$('tree-toggle').click();await until(()=>deletedTreeLoaded);await until(()=>$('project-tree').querySelector('[data-project-path="notes/new.md"]'));
+assert.equal($('project-tree').querySelector('[data-project-path="missing.py"]'),null,'deleted files are hidden');
+const currentName=window.testUI.get().fileName;await window.testUI.openProjectFile('missing.py');assert.equal(window.testUI.get().fileName,currentName);assert.match($('project-status').textContent,/deleted from disk/);assert.equal(deletedReads,0);
+console.log('Rename viewer and deleted Git entry navigation/action guards passed');window.close();
