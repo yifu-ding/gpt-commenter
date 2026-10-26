@@ -349,8 +349,8 @@ function updateEditorControls(){
   $('pdf-page-float').setAttribute('aria-label',word?'Current Word page':'Current PDF page');
   if(word)updateDocumentZoom(wordViewer.zoom());
   $('pdf-screenshot').hidden=!pdfDocument && !isHtmlPreview();
-  $('pdf-screenshot').title=isHtmlPreview()?'Select HTML region':'Screenshot comment';
-  $('pdf-screenshot').setAttribute('aria-label',isHtmlPreview()?'Select HTML region':'Screenshot comment');
+  $('pdf-screenshot').title=isHtmlPreview()?'Select HTML region':'Circle an area to comment';
+  $('pdf-screenshot').setAttribute('aria-label',isHtmlPreview()?'Select HTML region':'Circle an area to comment');
   $('mode-cycle').hidden=!fileName || !!filePreview || (!!pdfDocument && !pdfDocument.main);
   const modeLabel=isMarkdown(fileName)?(mode==='source'?'Source':codeMode==='edit'?'Edit':'Preview'):/\.html?$/i.test(fileName)?(mode==='source'?'Source':'Preview'):'Source';
   toolbarIcon('mode-cycle',modeLabel,modeLabel.toLowerCase());
@@ -526,6 +526,7 @@ function close(renderDocument=false) {
   $('composer').hidden = true; pending = null; editingId = null;updateActiveNoteHighlight();
   // Repaint only persisted HTML notes; discard the temporary selected range.
   frameNotes();codeEditor.setNotes(items);if(filePreview?.kind==='word')wordViewer.show(filePreview,items);
+  if(pdfDocument)pdfViewer.show(pdfDocument,items);
   selectionAnchor = null;document.body.classList.remove('composing');if(renderDocument)render();
   queueMicrotask(()=>fileRefresh.check());
 }
@@ -560,6 +561,7 @@ function open(selection,item = null,anchor = null) {
   const draft=sameSelection(pending,selection)?commentDraft:'';
   selectionAnchor = anchor;
   pending = Object.fromEntries(['startOffset','endOffset','startLine','endLine','selectedText','mappingStatus','pdf','word','html','patch'].map(key => [key,selection[key]]));
+  if(pdfDocument)pdfViewer.show(pdfDocument,[...items,...(!item?[{...pending,id:'pending-selection',temporary:true}]:[])]);
   if(selection.patch)patchExplanation=null;
   editingId = item?.id || null;
   const shot=selection.pdf?.screenshot || selection.html?.screenshot;

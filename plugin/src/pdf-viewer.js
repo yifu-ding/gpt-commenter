@@ -30,7 +30,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
       for(const item of notes){
         if(item.pdf?.region){
           if(item.pdf.page!==page.number)continue;
-          const r=item.pdf.region,mark=window.document.createElement('button');mark.className='pdf-region-note annotation-icon';mark.setAttribute('aria-label',`Screenshot comment on PDF page ${page.number}`);mark.title=item.anchorStatus==='edited'?'PDF changed — review this screenshot comment':item.message || 'Screenshot selection';
+          const r=item.pdf.region,mark=window.document.createElement(item.temporary?'div':'button');mark.className=item.temporary?'pdf-region-drag':'pdf-region-note annotation-icon';if(!item.temporary){mark.setAttribute('aria-label',`Screenshot comment on PDF page ${page.number}`);mark.title=item.anchorStatus==='edited'?'PDF changed — review this screenshot comment':item.message || 'Screenshot selection';}
           Object.assign(mark.style,{left:`${r.x}px`,top:`${r.y}px`,width:`${r.width}px`,height:`${r.height}px`});
           if(!item.temporary){mark.dataset.annotation=item.id;mark.textContent=item.kind==='explanation'?'?':'▤';mark.addEventListener('click',event=>{event.stopPropagation();onNote(item,mark.getBoundingClientRect());});}
           highlights.append(mark);continue;
