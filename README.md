@@ -11,7 +11,7 @@ MarkAtlas turns your file review into a clear request for your AI assistant. Rea
 
 Review the whole picture before asking AI to act.
 
-## From reading to action
+## ✨ From Reading to Action
 
 1. **Open a file or project.** Select a local file to open its parent folder and focus that file, or connect a project folder directly.
 2. **Mark what matters.** Select text to comment, or capture a PDF region to discuss a figure, table, or layout.
@@ -35,6 +35,26 @@ Office files opened from the project tree use the host application's native view
 ## Understand before you change
 
 Choose **Explanation** on a selection and select a detail level. MarkAtlas displays the AI explanation in the selection panel without opening another chat tab. It uses host MCP sampling when available, with a fresh background Codex CLI conversation as the fallback. These requests include the complete selection and any attached screenshot, so the explanation model has the context it needs.
+
+## From comments to patches
+
+These four walkthroughs show the review flow from marking text to applying a revised patch.
+
+1. Select text, leave a comment describing the change you want, or ask for an explanation directly in the document.
+
+<p align="center"><img src="docs/gifs/01-comment-and-explain.gif" width="900" alt="Select text, add a comment, or ask for an explanation"></p>
+
+2. Open and filter the current file's comments and explanations, then jump from a comment to its location in the document.
+
+<p align="center"><img src="docs/gifs/02-review-comments.gif" width="900" alt="Open and filter comments and explanations, then jump to a comment in the document"></p>
+
+3. Generate patches without changing the file, send the review request, and open the completed chat response.
+
+<p align="center"><img src="docs/gifs/03-send-review-request.gif" width="900" alt="Generate patches without changing the file, send a request, and open the completed chat response"></p>
+
+4. Review the proposed patch, request a revision, apply the updated patch, and enjoy the polished result in your file.
+
+<p align="center"><img src="docs/gifs/04-review-and-apply-patch.gif" width="900" alt="Review and revise a patch, apply the updated patch, and see the polished result in the file"></p>
 
 ## Comments that follow your work
 
@@ -112,6 +132,12 @@ See the [plugin guide](plugin/README.md) for controls, troubleshooting, and loca
 
 **MarkAtlas** · Developed by **Zihao Jing**<br>
 Collect comments. Let AI act.
+
+## Third-party components and acknowledgements
+
+Partial style(s) is(are) sourced or adapted from Blue Topaz (https://github.com/PKM-er/Blue-Topaz_Obsidian-css), and I would like to express my appreciation to WhyI (https://github.com/whyt-byte) and pkmer.cn (https://pkmer.cn).
+
+The theme is MIT-licensed; its copyright notice and full license are preserved in [blue-topaz.css](plugin/assets/obsidian/blue-topaz.css).
 
 ## Support and policies
 

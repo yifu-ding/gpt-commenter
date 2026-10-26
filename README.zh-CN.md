@@ -36,6 +36,26 @@ MarkAtlas 将文件审阅中的批注整理成清晰的 AI 请求。阅读文档
 
 选中内容后，选择 **Explanation（解释）** 和详细程度。AI 解释会直接显示在选区面板中，无需另开聊天标签页。如果宿主支持 MCP sampling，就使用宿主的模型调用能力；否则，通过 Codex CLI 在后台新建临时会话。请求会包含完整选区和附带截图，为解释提供必要上下文。
 
+## 实际操作：从批注到补丁
+
+四段动图按操作顺序展示完整流程：在文档中标记内容、整理批注、发送请求，再审阅并应用 AI 提出的补丁。
+
+1. 选中文字，写下希望修改的内容，或直接在文档中询问解释。
+
+<p align="center"><img src="docs/gifs/01-comment-and-explain.gif" width="900" alt="选中文本、添加修改批注或直接询问解释"></p>
+
+2. 打开当前文件的批注和解释，筛选列表，并从批注跳转到文档中的对应位置。
+
+<p align="center"><img src="docs/gifs/02-review-comments.gif" width="900" alt="打开并筛选当前文件的批注和解释，跳转到文档位置"></p>
+
+3. 选择只生成补丁而不改动文件，发送审阅请求，并在任务完成后打开聊天回复。
+
+<p align="center"><img src="docs/gifs/03-send-review-request.gif" width="900" alt="只生成补丁、发送审阅请求并打开完成后的聊天回复"></p>
+
+4. 审阅 AI 提出的补丁并请求修改，应用更新后的补丁，在文件中查看结果。
+
+<p align="center"><img src="docs/gifs/04-review-and-apply-patch.gif" width="900" alt="审阅补丁、请求修改、应用更新后的补丁并查看文件结果"></p>
+
 ## 批注跟随编辑更新
 
 发送前，批注会随文本编辑调整位置。删除已批注的段落，会同时删除对应批注；绑定旧版 PDF 的截图批注也会被移除。发送时，系统会先完成待处理的自动保存，再检查剩余文件引用。如果文件被外部程序修改，请刷新后再发送审阅内容。
@@ -112,6 +132,12 @@ npm run build --prefix plugin
 
 **MarkAtlas** · 开发者：**Zihao Jing**<br>
 收集批注，让 AI 行动。
+
+## 第三方组件与致谢
+
+部分样式来源于或改编自 [Blue Topaz](https://github.com/PKM-er/Blue-Topaz_Obsidian-css)，特此感谢 [WhyI](https://github.com/whyt-byte) 和 [pkmer.cn](https://pkmer.cn)。
+
+该主题采用 MIT 许可证；版权声明及完整许可文本已保留在 [blue-topaz.css](plugin/assets/obsidian/blue-topaz.css) 中。
 
 ## 支持与政策
 
