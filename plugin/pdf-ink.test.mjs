@@ -9,7 +9,7 @@ const result = weightPdfGlyphs(original, window);
 const parsed = new window.DOMParser().parseFromString(decodeURIComponent(result.split(',')[1]), 'image/svg+xml');
 const glyph = parsed.querySelector('use');
 assert.equal(glyph.getAttribute('stroke'), 'rgb(0%, 0%, 0%)');
-assert.equal(glyph.getAttribute('stroke-width'), '0.25');
+assert.equal(glyph.getAttribute('stroke-width'), '0.15');
 assert.equal(parsed.querySelector('path[fill="red"]').getAttribute('stroke'), null);
 assert.equal(weightPdfGlyphs('data:image/png;base64,AA==', window), 'data:image/png;base64,AA==');
 console.log('PDF vector glyph weight and non-text preservation passed');

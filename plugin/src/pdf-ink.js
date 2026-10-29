@@ -10,7 +10,7 @@ export function weightPdfGlyphs(image, browserWindow) {
     const fill = glyph.closest('[fill]')?.getAttribute('fill');
     if (!fill || fill === 'none') continue;
     glyph.setAttribute('stroke', fill);
-    glyph.setAttribute('stroke-width', '0.25');
+    glyph.setAttribute('stroke-width', '0.15');
     glyph.setAttribute('stroke-linejoin', 'round');
     glyph.setAttribute('paint-order', 'stroke fill');
     weighted++;
