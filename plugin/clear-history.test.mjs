@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {build} from 'esbuild';
 import {JSDOM} from 'jsdom';
 import {accentColors,applyThemeColor,syncRecentHistory,recentRootsKey} from './src/viewer-settings.js';
+import {recentHistoryKey} from './src/recent-history.js';
 import {explanationSettings,defaults,settingsSchema,settingsLayout,presentSettings} from './src/explanation-settings.js';
 import {OpenAISettingsReadResultSchema} from '@openai/mcp-extensions';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
@@ -22,7 +23,7 @@ for(const action of ['cancel','confirm']){
  const dom=new JSDOM(readFileSync(new URL('./src/clear-history.html',import.meta.url),'utf8'),{runScripts:'outside-only',url:'https://settings.test'}),w=dom.window;w.calls=[];w.eval(bundle.outputFiles[0].text);await new Promise(r=>setTimeout(r,0));
  assert.equal(w.calls.length,0,'opening the confirmation does not clear history');w.document.getElementById(action).click();await new Promise(r=>setTimeout(r,0));
  assert.equal(w.calls.length,action==='cancel'?0:1);if(action==='confirm')assert.equal(w.calls[0].arguments.confirmed,true);
- const storage=w.localStorage;storage.setItem(recentRootsKey,'["old"]');storage.setItem('comments','keep');assert.equal(syncRecentHistory(storage,'1'),true);assert.equal(storage.getItem('comments'),'keep');storage.setItem(recentRootsKey,'["new"]');assert.equal(syncRecentHistory(storage,'1'),false);
+ const storage=w.localStorage;storage.setItem(recentRootsKey,'["old"]');storage.setItem(recentHistoryKey,'[{"root":"/old","openedAt":1}]');storage.setItem('comments','keep');assert.equal(syncRecentHistory(storage,'1'),true);assert.equal(storage.getItem(recentHistoryKey),null);assert.equal(storage.getItem('comments'),'keep');storage.setItem(recentRootsKey,'["new"]');assert.equal(syncRecentHistory(storage,'1'),false);
  for(const color of Object.keys(accentColors))for(const theme of ['light','dark']){applyThemeColor(color,{theme},w.document.documentElement);assert.equal(w.document.documentElement.style.getPropertyValue('--markatlas-accent'),accentColors[color][theme==='dark'?1:0]);}
  dom.window.close();
 }

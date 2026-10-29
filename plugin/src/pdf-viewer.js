@@ -1,4 +1,5 @@
 // Continuous PDF pages use fixed page coordinates; image loading follows visibility.
+import {weightPdfGlyphs} from './pdf-ink.js';
 export const PDF_MIN_ZOOM=.5,PDF_MAX_ZOOM=16;
 // PDF extractors often group a whole Chinese line as one word. Clip that box
 // to the selected character interval, using browser glyph widths when available.
@@ -22,8 +23,10 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
   let document=null,epoch=0,notes=[],resizeObserver=null,intersection=null;
   let regionMode=false,drag=null,findSpan=()=>{};
   function setRegionMode(value){regionMode=!!value;container.classList.toggle('pdf-region-mode',regionMode);if(drag){drag.box.remove();drag=null;}onRegionMode(regionMode);}
-  const frames=new Map();let zoom=1,resizePages=()=>{},currentPage=1,pageObserver=null;
-  function destroy(){findSpan=()=>{};setRegionMode(false);++epoch;resizeObserver?.disconnect();intersection?.disconnect();pageObserver?.disconnect();pageObserver=null;resizeObserver=intersection=null;frames.clear();container.replaceChildren();document=null;}
+  const frames=new Map();let zoom=1,resizePages=()=>{},rememberPan=()=>{},restoreVisibility=()=>{},currentPage=1,pageObserver=null;
+  function destroy(){findSpan=()=>{};rememberPan=restoreVisibility=()=>{};setRegionMode(false);++epoch;resizeObserver?.disconnect();intersection?.disconnect();pageObserver?.disconnect();pageObserver=null;resizeObserver=intersection=null;frames.clear();container.replaceChildren();document=null;}
+  container.addEventListener('scroll',()=>rememberPan());
+  window.document.addEventListener('visibilitychange',()=>{if(window.document.hidden)restoreVisibility(false);else window.requestAnimationFrame(()=>restoreVisibility(true));});
   function marks(){
     for(const {page,highlights,wordSpans} of frames.values()){
       highlights.replaceChildren();
@@ -45,13 +48,23 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
     if(document===data){notes=items;marks();return;}
     destroy();const current=epoch;document=data;notes=items;
     const stack=window.document.createElement('div');stack.className='pdf-pages';container.append(stack);
-    function resize(){if(current!==epoch)return;const available=Math.max(100,container.getBoundingClientRect().width);let widest=available;for(const {page,canvas,frame} of frames.values()){const width=Math.min(page.width,available)*zoom,scale=width/page.width;canvas.style.transform=`scale(${scale})`;frame.style.height=`${page.height*scale}px`;frame.style.width=`${width}px`;widest=Math.max(widest,width);}stack.style.width=`${widest+available}px`;}
+    let centerScroll=0,panOffset=0,needsRestore=false;
+    function resize(){
+      if(current!==epoch)return;
+      const measured=container.getBoundingClientRect().width;
+      if(!measured || (needsRestore && window.document.hidden)){needsRestore=true;return;}
+      const available=Math.max(100,measured);let widest=available;
+      for(const {page,canvas,frame} of frames.values()){const width=Math.min(page.width,available)*zoom,scale=width/page.width;canvas.style.transform=`scale(${scale})`;frame.style.height=`${page.height*scale}px`;frame.style.width=`${width}px`;widest=Math.max(widest,width);}
+      stack.style.width=`${widest+available}px`;centerScroll=widest/2;needsRestore=false;container.scrollLeft=centerScroll+panOffset;
+    }
+    rememberPan=()=>{if(!needsRestore && container.getBoundingClientRect().width>0)panOffset=container.scrollLeft-centerScroll;};
+    restoreVisibility=visible=>{if(visible)resize();else needsRestore=true;};
     async function load(number){
       const entry=frames.get(number);if(!entry || entry.loaded)return;entry.loaded=true;
       const text=window.document.createElement('div');text.className='pdf-text';text.setAttribute('aria-label',`Selectable text, PDF page ${number}`);
       for(const word of entry.page.words){const span=window.document.createElement('span');span.className='pdf-word';span.dataset.start=word.startOffset;span.dataset.end=word.endOffset;span.dataset.page=number;span.textContent=word.text+' ';Object.assign(span.style,{left:`${word.x}px`,top:`${word.y}px`,height:`${word.height}px`,fontSize:`${word.height*.9}px`,lineHeight:`${word.height}px`});text.append(span);entry.wordSpans.set(word.startOffset,span);}
       entry.canvas.insertBefore(text,entry.highlights);marks();
-      try{const result=await loadPage(data,number);if(current===epoch)entry.image.src=result.image;}catch(error){if(current===epoch){entry.loaded=false;onError(error);}}
+      try{const result=await loadPage(data,number);if(current===epoch)entry.image.src=weightPdfGlyphs(result.image,window);}catch(error){if(current===epoch){entry.loaded=false;onError(error);}}
     }
     for(const page of data.pages){
       const frame=window.document.createElement('div');frame.className='pdf-frame';frame.dataset.pdfPage=page.number;frame.setAttribute('aria-label',`PDF page ${page.number}`);
@@ -76,7 +89,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
       for(const span of matches)span.classList.add('pdf-search-match');
       (matches[0] || entry.frame).scrollIntoView?.({block:'center',behavior:'instant'});
     };
-    resizePages=resize;resize();container.scrollLeft=(parseFloat(stack.style.width)-Math.max(100,container.getBoundingClientRect().width))/2;marks();onZoom(zoom);
+    resizePages=resize;resize();marks();onZoom(zoom);
     if(typeof ResizeObserver!=='undefined'){resizeObserver=new ResizeObserver(resize);resizeObserver.observe(container);}
     if(typeof IntersectionObserver!=='undefined'){
       intersection=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting)load(Number(entry.target.dataset.pdfPage));},{rootMargin:'600px'});
@@ -110,7 +123,7 @@ export function createPdfViewer(container,{loadPage,onSelection,onNote,onError,o
     let anchor=null;
     if(point){let distance=Infinity;for(const {frame} of frames.values()){const r=frame.getBoundingClientRect();if(!r.width || !r.height)continue;const d=Math.max(r.top-point.y,0,point.y-r.bottom);if(d<distance){distance=d;anchor={frame,x:(point.x-r.left)/r.width,y:(point.y-r.top)/r.height};}}}
     zoom=next;resizePages();
-    if(anchor){const r=anchor.frame.getBoundingClientRect();container.scrollLeft+=r.left+anchor.x*r.width-point.x;(container.closest('main') || window).scrollBy({top:r.top+anchor.y*r.height-point.y,left:0,behavior:'instant'});}
+    if(anchor){const r=anchor.frame.getBoundingClientRect();container.scrollLeft+=r.left+anchor.x*r.width-point.x;rememberPan();(container.closest('main') || window).scrollBy({top:r.top+anchor.y*r.height-point.y,left:0,behavior:'instant'});}
     onZoom(zoom);
   }
   function wheelZoom(event){

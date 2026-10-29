@@ -5,6 +5,7 @@ import {createTreeToolbar} from './tree-toolbar.js';
 import {createDeleteEntryDialog} from './delete-entry-dialog.js';
 import {createEntryDialog} from './create-entry-dialog.js';
 import {applyThemeColor,syncRecentHistory,recentRootsKey} from './viewer-settings.js';
+import {readRecentHistory,rememberRecent,recentHistoryKey} from './recent-history.js';
 import {applyHostAccent} from './host-accent.js';
 import {createTreePreferences,appendGitBadge} from './tree-preferences.js';
 import {fitBreadcrumb} from './breadcrumb-layout.js';
@@ -54,7 +55,7 @@ const toolbarPaths={
   wide:'<path d="M3 4v16M21 4v16M4 12h16m-12-4-4 4 4 4m8-8 4 4-4 4"/>',
   readable:'<path d="M6 4v16M18 4v16M9 7h6M9 11h6M9 15h6"/>',
   wrap:'<path d="M4 4v16M8 8h12v5a4 4 0 0 1-4 4h-7m3-3-3 3 3 3"/>',
-  nowrap:'<path d="M4 4v16M8 8h8M8 12h8M8 16h8m1-7 4 3-4 3"/>'
+  nowrap:'<path d="M4 4v16M8 12h8m1-3 4 3-4 3"/>'
 };
 function toolbarIcon(id,label,icon){const button=$(id);button.innerHTML=`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${toolbarPaths[icon]}</svg>`;button.title=label;button.setAttribute('aria-label',label);}
 for(const [id,label,icon] of [['document-nav-toggle','Outline','outline'],['comments-toggle','Comments','comments'],['tree-toggle','Files','files'],['mode-cycle','Preview','preview']])toolbarIcon(id,label,icon);
@@ -857,7 +858,7 @@ async function openSingleWorkspace(tree,resourceUri){
     await openProjectFile(tree.sourcePath.slice(project.rootPath.replace(/\/$/,'').length+1));return true;
   }
   ++workspaceRequest;
-  if(!await acceptWorkspace({...tree,...(resourceUri?{resourceUri}:{})},{allowDefault:false}))return;
+  if(!await acceptWorkspace({...tree,...(resourceUri?{resourceUri}:{})},{allowDefault:false,recordRecent:false}))return;
   connectedFolder=tree.singleFile?null:tree.rootPath;await openProjectFile(tree.singlePath);return true;
 }
 // File entrypoints carry the original local path on the server tool call,
@@ -1503,9 +1504,21 @@ async function serverData(name,args={}) {
   if(!result.structuredContent)throw Error('Project data is unavailable.');
   return result.structuredContent;
 }
-let recentRoots=[];try{recentRoots=JSON.parse(localStorage.getItem(recentRootsKey)||'[]').filter(root=>typeof root==='string').slice(0,10);}catch{}
-function renderRecentRoots(){const node=$('recent-projects');node.replaceChildren();node.hidden=!!project || !!fileName || !recentRoots.length;if(node.hidden)return;const heading=document.createElement('p');heading.textContent='Recently opened';node.append(heading);for(const root of recentRoots){const button=document.createElement('button');button.textContent=root.split('/').filter(Boolean).at(-1)||root;button.title=root;button.setAttribute('aria-label',`Open recent project ${button.textContent}`);button.addEventListener('click',async()=>{try{if(!await canLeaveFile())return;const tree=await serverData('list_markdown_project',{folderPath:root});if(await acceptWorkspace(tree,{selectDefault:true}))connectedFolder=tree.rootPath;}catch(error){$('project-status').hidden=false;$('project-status').textContent=error.message;}});node.append(button);}}
-function rememberRoot(root){if(!root)return;recentRoots=[root,...recentRoots.filter(value=>value!==root)].slice(0,10);try{localStorage.setItem(recentRootsKey,JSON.stringify(recentRoots));}catch{}renderRecentRoots();}
+let recentRoots=[];try{recentRoots=readRecentHistory(localStorage);}catch{}
+function renderRecentRoots(){
+ const node=$('recent-projects');node.replaceChildren();node.hidden=!!project || !!fileName || !recentRoots.length;if(node.hidden)return;
+ const heading=document.createElement('p');heading.textContent='Recently opened';node.append(heading);
+ for(const entry of recentRoots){
+  const button=document.createElement('button');button.textContent=entry.root.split('/').filter(Boolean).at(-1)||entry.root;
+  button.title=entry.root;
+  button.setAttribute('aria-label',`Open recent project ${button.textContent}`);
+  button.addEventListener('click',async()=>{try{if(!await canLeaveFile())return;
+   const tree=await serverData('list_markdown_project',{folderPath:entry.root});
+   if(await acceptWorkspace(tree,{selectDefault:true})){connectedFolder=tree.rootPath;}
+  }catch(error){$('project-status').hidden=false;$('project-status').textContent=error.message;}});node.append(button);
+ }
+}
+function rememberRoot(root){if(root){try{recentRoots=rememberRecent(localStorage,root);}catch{}renderRecentRoots();}}
 renderRecentRoots();
 let workspaceRequest=0;
 function clearWorkspaceDocument() {
@@ -1513,14 +1526,14 @@ function clearWorkspaceDocument() {
   $('filename').textContent='MarkAtlas';$('comment').disabled=true;render();
   $('status').textContent='';
 }
-async function acceptWorkspace(tree,{selectDefault=false,allowDefault=true}={}) {
+async function acceptWorkspace(tree,{selectDefault=false,allowDefault=true,recordRecent=true}={}) {
   const initial=!project;
   const changed=project && (project.rootPath!==tree.rootPath || !!project.singleFile!==!!tree.singleFile || (tree.singleFile && project.singlePath!==tree.singlePath));
   if(changed && !(await canLeaveFile()))return false;
   if(changed){selectedCreationFolder=null;treeAutoExpand=true;await flushProjectState();dirtyIdentities.clear();projectDrafts={};linkedPdf=null;currentEtag=null;clearWorkspaceDocument();breadcrumbFolder=null;$('project-filter').value='';$('project-tree').replaceChildren();}
   if(project && !changed)Object.assign(project,tree);else project=tree;
   if((initial || changed) && !tree.singleFile){try{const saved=await serverData('review_project_state',{root:tree.rootPath});for(const id of saved.removedIds || []){removedNoteIds.add(id);batchEntries.delete(id);}projectDrafts=saved.drafts || {};for(const [key,draft] of Object.entries(projectDrafts)){const prefix='project:'+tree.rootPath.replace(/\/+$/,'')+'/';if(!key.startsWith(prefix))continue;for(const item of draft.items || [])if(item.kind==='explanation' && !removedNoteIds.has(item.id))batchEntries.set(item.id,{identity:key,root:tree.rootPath,path:key.slice(prefix.length),item});}for(const [id,entry] of saved.entries || [])if(entryRoot(entry)===normalizedRoot(tree.rootPath))batchEntries.set(id,entry);}catch(error){updateStatus(`Cannot load project notes: ${error.message}`);}}
-  if(!tree.singleFile && (initial || changed || selectDefault))rememberRoot(tree.rootPath);
+  if(recordRecent && !tree.singleFile && (initial || changed || selectDefault))rememberRoot(tree.rootPath);
   $('project-status').hidden=true;$('project-status').textContent='';
   renderBreadcrumb();renderProjectTree();renderBatch();
   // Only choose a default when connecting a folder, never on focus/tree refresh.
@@ -1627,9 +1640,9 @@ async function refreshViewerSettings(){
   if(changed){applyHostContext(app.getHostContext());renderProjectTree();updateLayout();codeEditor.measure();positionComposer();}
  }catch(error){console.warn('MarkAtlas settings unavailable:',error.message);}finally{settingsRequest=null;}})();return settingsRequest;
 }
-window.addEventListener('focus',()=>{refreshViewerSettings();});
+window.addEventListener('focus',()=>{try{recentRoots=readRecentHistory(localStorage);renderRecentRoots();}catch{}refreshViewerSettings();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshViewerSettings();});
-window.addEventListener('storage',event=>{if(event.key===recentRootsKey){try{recentRoots=JSON.parse(event.newValue||'[]');renderRecentRoots();}catch{}}});
+window.addEventListener('storage',event=>{if(event.key===recentRootsKey || event.key===recentHistoryKey || event.key===null){try{recentRoots=readRecentHistory(localStorage);renderRecentRoots();}catch{}}});
 const settingsPoll=setInterval(()=>{if(!document.hidden)refreshViewerSettings();},3000);
 window.addEventListener('pagehide',()=>clearInterval(settingsPoll));
 app.onhostcontextchanged = context=>{applyHostContext(context);loadWorkspace();};

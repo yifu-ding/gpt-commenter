@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';import {JSDOM} from 'jsdom';
 import {clippedPdfWord,createPdfViewer} from './src/pdf-viewer.js';
 const dom=new JSDOM('<article id="pdf"></article>');globalThis.window=dom.window;
-window.Range.prototype.getClientRects=()=>[];const container=window.document.getElementById('pdf');let selected,opened;
+window.Range.prototype.getClientRects=()=>[];const container=window.document.getElementById('pdf');container.getBoundingClientRect=()=>({width:100,left:0,top:0,right:100,bottom:800,height:800});let selected,opened;
 const data={root:'/project',path:'main.pdf',main:'main.tex',fingerprint:'version',text:'First passage\n\nSecond passage\n',pages:[{number:1,width:600,height:800,startOffset:0,endOffset:14,words:[{text:'First',x:30,y:40,width:25,height:12,startOffset:0,endOffset:5},{text:'passage',x:60,y:40,width:50,height:12,startOffset:6,endOffset:13}]},{number:2,width:600,height:800,startOffset:15,endOffset:30,words:[{text:'Second',x:30,y:40,width:35,height:12,startOffset:15,endOffset:21},{text:'passage',x:70,y:40,width:50,height:12,startOffset:22,endOffset:29}]}]};
 const viewer=createPdfViewer(container,{loadPage:async()=>({image:'data:image/png;base64,AA=='}),onSelection:s=>selected=s,onNote:n=>opened=n,onError:e=>{throw e;}});
 viewer.show(data);assert.equal(container.querySelectorAll('.pdf-frame').length,2,'all pages belong to one continuous document');
@@ -78,5 +78,18 @@ loadingImages[1].dispatchEvent(new window.Event('load'));assert.equal(readyCount
 loadingImages[0].dispatchEvent(new window.Event('load'));assert.equal(readyCount,1);
 loadingViewer.show({...data});const staleImage=container.querySelector('img');loadingViewer.destroy();
 staleImage.dispatchEvent(new window.Event('load'));assert.equal(readyCount,1);
+let measuredWidth=600,resizeLayout,tabHidden=false;
+container.getBoundingClientRect=()=>({width:measuredWidth,left:0,top:0,right:measuredWidth,bottom:800,height:800});
+globalThis.ResizeObserver=class{constructor(callback){resizeLayout=callback;}observe(){}disconnect(){}};
+Object.defineProperty(window.document,'hidden',{configurable:true,get:()=>tabHidden});
+window.requestAnimationFrame=callback=>callback();
+const layoutViewer=createPdfViewer(container,{loadPage:async()=>({image:'data:image/png;base64,AA=='}),onError:e=>{throw e;}});
+layoutViewer.show(data);assert.equal(container.scrollLeft,300,'the PDF starts centered');
+container.scrollLeft=360;container.dispatchEvent(new window.Event('scroll'));
+tabHidden=true;window.document.dispatchEvent(new window.Event('visibilitychange'));measuredWidth=0;resizeLayout();container.scrollLeft=0;
+measuredWidth=600;tabHidden=false;window.document.dispatchEvent(new window.Event('visibilitychange'));
+assert.equal(container.scrollLeft,360,'returning to a PDF tab restores the prior horizontal position');
+measuredWidth=500;resizeLayout();assert.equal(container.scrollLeft,310,'resizing keeps the same offset from the page center');
+layoutViewer.destroy();delete globalThis.ResizeObserver;
 dom.window.close();delete globalThis.window;
 console.log('Continuous PDF pages, native text selection, cross-page anchors, highlights, note reopening, and stable text layers passed');

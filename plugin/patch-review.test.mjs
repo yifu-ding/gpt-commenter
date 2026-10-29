@@ -18,7 +18,9 @@ try{
  assert.equal($('patch-comment'),null,'reuse the shared floating composer instead of a second input');
  const row=document.querySelector('.patch-added'),range=document.createRange();range.selectNodeContents(row);dom.window.getSelection().removeAllRanges();dom.window.getSelection().addRange(range);document.querySelector('.patch-diff').dispatchEvent(new dom.window.Event('pointerup'));
  assert.equal(offered.selectedText,'+New');assert.equal(offered.patch.id,record.id);
+ const main=document.querySelector('main'),diff=document.querySelector('.patch-diff'),proposed=$('patch-proposed');main.scrollTop=480;diff.scrollLeft=120;proposed.value='Unsaved draft';
  await ui.saveComment(offered.patch,'Keep the qualifier');assert.equal(record.comments.length,1);assert.equal(record.comments[0].quote,'+New');assert.equal(applied,false);assert.match($('patch-review').textContent,/Keep the qualifier/);
+ assert.equal(main.scrollTop,480,'saving a comment preserves the patch scroll position');assert.equal(document.querySelector('.patch-diff'),diff,'saving a comment does not replace the diff');assert.equal(diff.scrollLeft,120);assert.equal($('patch-proposed'),proposed);assert.equal(proposed.value,'Unsaved draft');
  assert.equal($('wrap-lines').getAttribute('aria-pressed'),'false','redrawing a patch keeps the shared wrap preference');
  await assert.rejects(ui.saveComment(offered.patch,'Outdated selection'),/patch changed/);
  $('patch-proposed').value='Better\n';[...$('patch-review').querySelectorAll('button')].find(b=>b.textContent==='Save patch').click();await until(()=>record.proposedText==='Better\n' && !$('patch-proposed').disabled);assert.equal(applied,false);

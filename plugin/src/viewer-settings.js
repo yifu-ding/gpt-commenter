@@ -4,9 +4,10 @@ export function applyThemeColor(color,context,root=document.documentElement){
  const dark=(context?.theme || root.dataset.theme)==='dark' || (!context?.theme && !root.dataset.theme && root.ownerDocument.defaultView.matchMedia?.('(prefers-color-scheme: dark)').matches);
  const accent=accentColors[color][dark?1:0];root.style.setProperty('--markatlas-accent',accent);root.style.setProperty('--markatlas-accent-soft',`color-mix(in srgb, ${accent} ${dark?22:12}%, ${dark?'#191b1a':'white'})`);
 }
+import {recentHistoryKey} from './recent-history.js';
 export const recentRootsKey='markatlas:recent-projects:v1';
 const revisionKey='markatlas:recent-projects-cleared:v1';
 export function syncRecentHistory(storage,revision){
  if(!revision || storage.getItem(revisionKey)===revision)return false;
- storage.removeItem(recentRootsKey);storage.setItem(revisionKey,revision);return true;
+ storage.removeItem(recentRootsKey);storage.removeItem(recentHistoryKey);storage.setItem(revisionKey,revision);return true;
 }

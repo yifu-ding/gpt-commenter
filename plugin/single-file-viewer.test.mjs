@@ -25,8 +25,10 @@ function select(node,a,b){const range=window.document.createRange();range.setSta
 
 window.pdfVersion='one';window.singlePDF={main:null,text:'First passage\n\nSecond passage\n',pages:[{number:1,width:600,height:800,startOffset:0,endOffset:14,words:[{text:'First',x:30,y:40,width:25,height:12,startOffset:0,endOffset:5},{text:'passage',x:60,y:40,width:50,height:12,startOffset:6,endOffset:13}]},{number:2,width:600,height:800,startOffset:15,endOffset:30,words:[{text:'Second',x:30,y:40,width:35,height:12,startOffset:15,endOffset:21},{text:'passage',x:70,y:40,width:50,height:12,startOffset:22,endOffset:29}]}]};
 await flush();await flush();
+const recentBeforeFileOpen=window.localStorage.getItem('markatlas:recent-opened:v2');
 await window.testApp.listeners.toolinput({arguments:{file:{name:'report.pdf',resourceUri:'file:///outside/report.pdf'}}});
 assert.equal(window.lastSingleOpen.path,'/outside/report.pdf');assert.equal($('project-tree').querySelectorAll('[data-project-path]').length,1);assert.equal($('project-tree').querySelector('[data-project-path]').dataset.projectPath,'report.pdf');assert.equal($('document').querySelectorAll('.pdf-frame').length,2);assert.equal($('pdf-tools').hidden,false);assert.equal($('pdf-screenshot').hidden,false);
+assert.equal(window.localStorage.getItem('markatlas:recent-opened:v2'),recentBeforeFileOpen,'opening an independent file does not record its parent directory');
 const regionFrame=$('document').querySelector('.pdf-frame'),regionImage=regionFrame.querySelector('img');
 regionFrame.getBoundingClientRect=()=>({left:0,top:0,right:600,bottom:800,width:600,height:800});
 Object.defineProperties(regionImage,{complete:{value:true},naturalWidth:{value:600},naturalHeight:{value:800}});
@@ -53,6 +55,7 @@ assert.equal($('width-mode').hidden,true,'PDF does not expose text width modes')
 // An opaque host entry returns the original path and full parent tree via toolresult.
 await window.testApp.listeners.toolresult({structuredContent:{status:'ready',singlePath:'report.pdf',rootPath:'/original/reports',sourcePath:'/original/reports/report.pdf',root:{name:'reports',children:[{type:'file',name:'report.pdf',path:'report.pdf',supported:true},{type:'file',name:'notes.md',path:'notes.md',supported:true}]}}});
 assert.equal($('filename').textContent,'report.pdf');assert.equal($('project-tree').querySelectorAll('[data-project-path]').length,2);
+assert.equal(window.localStorage.getItem('markatlas:recent-opened:v2'),recentBeforeFileOpen,'a file entry with a parent tree does not record a workspace');
 window.dispatchEvent(new window.Event('focus'));await flush();await flush();assert.equal(window.lastListArgs.folderPath,'/original/reports','refresh preserves the explicitly opened parent folder');
 const originalWords=$('document').querySelectorAll('.pdf-word'),originalRange=window.document.createRange();originalRange.setStart(originalWords[0].firstChild,0);originalRange.setEnd(originalWords[1].firstChild,7);window.getSelection().removeAllRanges();window.getSelection().addRange(originalRange);originalWords[1].dispatchEvent(new window.Event('pointerup',{bubbles:true}));if(!$('selection-action').hidden)$('selection-action').click();
 $('message').value='Review original PDF';enter();await flush();await flush();$('review-send').click();await until(()=>$('review-batch').hidden);
