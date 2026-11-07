@@ -198,35 +198,19 @@ function updateBatchDraft(){
   }
   saveBatchQueue();renderBatch();
 }
-const snapshotStates=new Map();
 function commentsRoot(){return normalizedRoot(fileName && !sourcePath?null:project?.rootPath);}
 function snapshotArgs(){const root=commentsRoot();return root && !project?.singleFile?{root}:{};}
-function snapshotScope(){return snapshotArgs().root || '';}
-function lastCommentsState(){
- const scope=snapshotScope();
- if(!snapshotStates.has(scope)){
-  const pending={};snapshotStates.set(scope,pending);
-  serverData('review_comments_snapshot',snapshotArgs()).then(state=>{if(snapshotStates.get(scope)===pending){snapshotStates.set(scope,state);renderBatch();}}).catch(()=>{});
- }
- return snapshotStates.get(scope);
-}
-function snapshotUnread(state){try{return state?.available && localStorage.getItem('markatlas:downloaded-comments:'+snapshotScope())!==state.id;}catch{return !!state?.available;}}
-function closeDownloadMenu(){ $('review-download-menu').hidden=true;$('review-download').setAttribute('aria-expanded','false'); }
 let noteFilter=null;
 for(const [id,value] of [['filter-comments','comment'],['filter-explanations','explanation']])$(id).addEventListener('click',()=>{noteFilter=noteFilter===value?null:value;renderBatch();});
 function renderBatch(){
-  const last=lastCommentsState();
   const all=currentBatchEntries(),comments=all.filter(entry=>entry.item.kind==='comment'),entries=all.filter(entry=>!noteFilter || entry.item.kind===noteFilter).sort((a,b)=>(a.path||a.item.sourceName||'').localeCompare(b.path||b.item.sourceName||'') || (a.item.startOffset||0)-(b.item.startOffset||0));
   $('filter-comments').setAttribute('aria-pressed',String(noteFilter==='comment'));$('filter-explanations').setAttribute('aria-pressed',String(noteFilter==='explanation'));$('comments-empty').textContent=all.length?'No notes match this filter.':'No notes yet. Select text to comment or explain.';
-  $('review-batch').hidden=!document.body.classList.contains('comments-open') && (!commenting || !all.length) && !last?.available;$('comments-empty').hidden=!!entries.length;
+  $('review-batch').hidden=!document.body.classList.contains('comments-open') && (!commenting || !all.length);$('comments-empty').hidden=!!entries.length;
   const fileCount=new Set(entries.map(entry=>JSON.stringify([entry.root || entry.item.pdf?.root || '',entry.path || entry.item.sourcePath || entry.item.sourceName]))).size;
   $('review-count').textContent=`${fileCount} ${fileCount===1?'File':'Files'}, ${entries.length} ${entries.length===1?'Annotation':'Annotations'}`;
   $('review-cancel-all').disabled=batchSending || !comments.length;
   $('review-send').disabled=batchSending || !comments.length;$('review-send').textContent=batchSending?'Sending…':'Send';
-  $('review-download').disabled=batchExporting || (!comments.length && !last?.available);
-  $('review-download').classList.toggle('has-new',snapshotUnread(last));
-  $('download-last-comments').disabled=batchExporting || !last?.available;
-  $('download-current-comments').disabled=batchExporting || batchSending || !comments.length;
+  $('review-download').disabled=batchExporting || batchSending || !comments.length;
   $('review-download').setAttribute('aria-busy',String(batchExporting));
   $('review-send-new').hidden=!composerUnavailable;
   $('review-send-new').disabled=batchSending || !comments.length;
@@ -301,9 +285,7 @@ async function sendQueuedReview(target='active'){
     if(!prepared.length){updateStatus('Obsolete comments removed. No comments remain to send.');return;}
     // Persist full entries (including screenshots and original selections) before dispatch.
     // A delivery failure must leave both the queue and this recovery copy available.
-    const scope=snapshotScope();
-    const snapshot=await serverData('review_comments_snapshot',{...snapshotArgs(),data:JSON.stringify({entries:prepared.map(entry=>[entry.item.id,entry]),drafts:projectDrafts,previewChanges})});
-    snapshotStates.set(scope,snapshot);
+    await serverData('review_comments_snapshot',{...snapshotArgs(),data:JSON.stringify({entries:prepared.map(entry=>[entry.item.id,entry]),drafts:projectDrafts,previewChanges})});
     renderBatch();
     await sendReviewBatch(extensions,prepared,target,project?.rootPath,{previewChanges});
     composerUnavailable=false;
@@ -314,41 +296,19 @@ async function sendQueuedReview(target='active'){
 const patchReview=createPatchReview({document,call:serverData,onSelection:offerSelection,onClose:()=>close(),onViewChange:()=>updateLayout(),getWrapLines:()=>wrapLines,send:async message=>{if(!extensions.message)throw Error('No chat input is available.');const result=await extensions.message.send(message);if(result?.isError)throw Error('Could not send patch comments.');return result;},beforeOpen:async()=>{if(!await canLeaveFile())return false;close();hideSelectionAction();return true;},onApplied:async()=>{const path=activeProjectPath;if(path){activeProjectPath=null;await openProjectFile(path);}}});
 try{$('preview-changes').setAttribute('aria-pressed',String(localStorage.getItem('markatlas:preview-changes')==='true'));}catch{}
 $('preview-changes').addEventListener('click',()=>{const active=$('preview-changes').getAttribute('aria-pressed')!=='true';$('preview-changes').setAttribute('aria-pressed',String(active));try{localStorage.setItem('markatlas:preview-changes',String(active));}catch{}});
-$('review-download').addEventListener('click',()=>{
- const open=$('review-download-menu').hidden;
- $('review-download-menu').hidden=!open;$('review-download').setAttribute('aria-expanded',String(open));
- if(open) [...$('review-download-menu').querySelectorAll('button')].find(button=>!button.disabled)?.focus();
-});
-document.addEventListener('pointerdown',event=>{if(!event.target.closest?.('#review-download-menu, #review-download'))closeDownloadMenu();});
-$('review-download-menu').addEventListener('keydown',event=>{
- if(event.key==='Escape'){closeDownloadMenu();$('review-download').focus();event.preventDefault();}
- if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
-  const buttons=[...$('review-download-menu').querySelectorAll('button')].filter(button=>!button.disabled),index=buttons.indexOf(document.activeElement);
-  const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;
-  buttons[next]?.focus();event.preventDefault();
- }
-});
-async function downloadComments(version){
- if(batchExporting || (version==='current' && batchSending))return;
- closeDownloadMenu();batchExporting=true;$('review-error').textContent='';renderBatch();
- const scope=snapshotScope(),last=snapshotStates.get(scope);
+async function downloadComments(){
+ if(batchExporting || batchSending)return;
+ batchExporting=true;$('review-error').textContent='';renderBatch();
  try{
-  let args;
-  if(version==='last')args={...snapshotArgs(),version};
-  else {
-    updateBatchDraft();
-    const root=commentsRoot();
-    const saved=root && !project?.singleFile?await flushProjectState():false;
-    args=saved?{root:project.rootPath}:{data:JSON.stringify(currentBatchEntries().map(entry=>[entry.item.id,entry]))};
-  }
-  const result=await serverData('export_review_comments',args);
-  if(version==='last' && result?.saved && last?.id){try{localStorage.setItem('markatlas:downloaded-comments:'+scope,last.id);}catch{}}
+  updateBatchDraft();
+  const entries=currentBatchEntries().filter(entry=>entry.item.kind==='comment' && entry.item.message?.trim());
+  if(!entries.length)return;
+  await serverData('export_review_comments',{data:JSON.stringify(entries.map(entry=>[entry.item.id,entry]))});
  }
  catch(error){$('review-error').textContent=error.message;}
  finally{batchExporting=false;renderBatch();}
 }
-$('download-last-comments').addEventListener('click',()=>downloadComments('last'));
-$('download-current-comments').addEventListener('click',()=>downloadComments('current'));
+$('review-download').addEventListener('click',downloadComments);
 $('review-send').addEventListener('click',()=>sendQueuedReview());
 $('review-send-new').addEventListener('click',()=>sendQueuedReview('new'));
 renderBatch();
@@ -1729,7 +1689,7 @@ window.addEventListener('pagehide',()=>clearInterval(settingsPoll));
 app.onhostcontextchanged = context=>{applyHostContext(context);loadWorkspace();};
 createTreeToolbar(treeToolButtons);
 setProjectOpen(true);
-app.connect().then(async()=>{snapshotStates.clear();renderBatch();await refreshViewerSettings();applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
+app.connect().then(async()=>{renderBatch();await refreshViewerSettings();applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
 
 // Capture before editor and host bubbling shortcuts. Each pane handles its own focus.
 window.addEventListener('keydown',event=>{

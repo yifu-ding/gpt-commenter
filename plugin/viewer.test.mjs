@@ -112,7 +112,7 @@ $('review-send').click();$('review-send').click();await until(()=>window.chatCal
 assert.deepEqual(JSON.parse(JSON.stringify(window.chatCalls[0]._meta['openai/message'])),{target:'active',send:true});
 assert.match(window.chatCalls[0].content.map(c=>c.text || '').join('\n'),/Please revise this/);
 assert.ok(!window.chatCalls[0].content.map(c=>c.text || '').join('\n').includes('"selectedText"'),'attachment preview is readable prose');
-assert.equal($('review-count').textContent,'0 Files, 0 Annotations','successful send clears the queue');assert.equal($('review-download').disabled,false);
+assert.equal($('review-count').textContent,'0 Files, 0 Annotations','successful send clears the queue');assert.equal($('review-download').disabled,true);
 assert.equal($('document').querySelector('.annotation-icon'),null,'successful send clears file marks');
 select($('document').querySelector('strong').firstChild,0,4);$('message').value='Please revise this.';enter();await flush();await flush();
 assert.equal($('document').querySelector('.pending-selection'),null);
