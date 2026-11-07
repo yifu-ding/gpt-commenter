@@ -12,6 +12,7 @@ import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
 import {registerAppResource, registerAppTool, RESOURCE_MIME_TYPE} from '@modelcontextprotocol/ext-apps/server';
 import {z} from 'zod';
+import {createCommentsExporter,exportReviewComments} from './comments-export.js';
 import {createFolderPicker} from './folder-picker.js';
 import {workspaceAccess} from './workspace.js';
 import {explanationStore} from './explanations.js';
@@ -114,6 +115,21 @@ registerAppTool(server,'read_latex_pdf',{description:'Read a PDF and its extract
 registerAppTool(server,'render_latex_pdf_page',{description:'Render one PDF page as scalable vector artwork for the viewer.',inputSchema:{...pdfArgs,page:z.number().int().min(1),fingerprint:z.string().optional(),format:z.enum(['svg','png']).optional()},_meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path,page,fingerprint,format})=>({content:[],structuredContent:await latex.page(root,path,page,fingerprint,format ?? 'svg')}));
 registerAppTool(server,'locate_latex_pdf_selection',{description:'Locate a PDF selection in its LaTeX source using SyncTeX and quote matching. Unresolved matches must be checked before editing.',inputSchema:{...pdfArgs,selection:z.object({page:z.number().int().min(1),x:z.number(),y:z.number(),startOffset:z.number().int().nonnegative(),quote:z.string().min(1).max(50000),fingerprint:z.string()})},_meta:{ui:{visibility:['app','model']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path,selection})=>({content:[],structuredContent:await latex.locate(root,path,selection)}));
 server.registerTool('read_latex_pdf_page',{description:'Read one page of a connected PDF as text and image when a review needs visual context.',inputSchema:{...pdfArgs,page:z.number().int().min(1)},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},async({root,path,page})=>{const data=await latex.read(root,path),p=data.pages[page-1];if(!p)throw Error('Invalid PDF page.');const result=await latex.page(root,path,page,data.fingerprint);return {content:[{type:'text',text:data.text.slice(p.startOffset,p.endOffset)},{type:'image',mimeType:'image/png',data:result.image.split(',')[1]}]};});
+const exportComments=createCommentsExporter({choose:createFolderPicker({mode:'save'})});
+registerAppTool(server,'export_review_comments',{
+  description:'Export compact JSON grouped by relative file path, with each comment represented as [selection position, original comment], to a destination chosen in the native Save dialog.',
+  inputSchema:{root:z.string().min(1).optional(),data:z.string().min(1).max(70*1024*1024).optional(),version:z.enum(['current','last']).optional()},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:true,openWorldHint:false}
+},async({root,data,version})=>({content:[],structuredContent:await exportReviewComments({root,data,version},{workspace,reviews,exportComments})}));
+registerAppTool(server,'review_comments_snapshot',{
+  description:'Persist a complete review batch before sending, or check the last saved batch. Retained until cache cleanup.',
+  inputSchema:{root:z.string().min(1).optional(),data:z.string().min(1).max(70*1024*1024).optional()},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+},async({root,data})=>{
+  if(root && !await workspace.sourceDiscoveryAllowed(root))throw Error('Project is no longer available.');
+  const bytes=await reviews.lastComments(root,data),record=bytes?JSON.parse(bytes):null;
+  return {content:[],structuredContent:{available:!!record,id:record?.id}};
+});
 const chooseFolder=createFolderPicker();
 registerAppTool(server,'choose_markdown_project_folder',{
   description:'Let the user select a local folder in the native folder chooser, then list file names without uploading contents.',inputSchema:{},
@@ -197,7 +213,11 @@ const explanationPreferences=explanationSettings();
 server.server.registerCapabilities({experimental:{'openai/settings':{readTool:'markatlas_settings_read',updateTool:'markatlas_settings_update'}}});
 server.registerTool('markatlas_settings_read',{
   title:'MarkAtlas settings',inputSchema:{},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
-},async()=>({content:[],structuredContent:{...presentSettings(await explanationPreferences.read()),recentHistoryRevision:await explanationPreferences.historyRevision()}}));
+},async()=>({content:[],structuredContent:{...presentSettings(await explanationPreferences.read()),recentHistoryRevision:await explanationPreferences.historyRevision(),recentWorkspaces:await explanationPreferences.recentWorkspaces()}}));
+registerAppTool(server,'remember_review_workspace',{
+  description:'Remember an opened workspace folder in local plugin history, newest first.',inputSchema:{root:z.string().min(1)},
+  _meta:{ui:{visibility:['app']}},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+},async({root})=>{const actual=await workspace.resolve(root,'.');return {content:[],structuredContent:{recentWorkspaces:await explanationPreferences.rememberWorkspace(actual)}};});
 server.registerTool('markatlas_settings_update',{
   title:'Update MarkAtlas settings',inputSchema:{set:z.object({explanationModel:z.enum(settingsSchema.properties.explanationModel.enum).optional(),treePosition:z.enum(['Left','Right','left','right']).optional(),themeColor:z.enum([...settingsSchema.properties.themeColor.enum,...settingsSchema.properties.themeColor.enum.map(value=>value[0].toUpperCase()+value.slice(1))]).optional(),showGitChanges:z.boolean().optional(),outlinePosition:z.enum(['Left','Right','left','right']).optional()}).strict()},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
 },async({set})=>({content:[],structuredContent:presentSettings(await explanationPreferences.update(normalizeSettingLabels(set)))}));

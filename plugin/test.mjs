@@ -76,6 +76,8 @@ try {
   assert.match(resource.contents[0].text, /MarkAtlas/);
   assert.match(resource.contents[0].text, /Comment/);
   const html = resource.contents[0].text;
+  assert.match(html, /id="review-download"/);
+  assert.ok(tools.some(tool=>tool.name==='export_review_comments'));
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.equal(scripts.length, 1, 'serve one complete viewer script');
   const bundle = readFileSync(new URL('./dist/viewer.js', import.meta.url), 'utf8');
@@ -96,6 +98,9 @@ try {
   const savedSettings=await client.callTool({name:'markatlas_settings_update',arguments:{set:{treePosition:'Right',outlinePosition:'Right',showGitChanges:false,themeColor:'Purple'}}});
   assert.equal(savedSettings.structuredContent.values.showGitChanges,false);
   assert.equal((await client.callTool({name:'markatlas_settings_update',arguments:{set:{showGitChanges:'false'}}})).isError,true);
+  const remembered=await client.callTool({name:'remember_review_workspace',arguments:{root:root.replace(/\/$/,'')}});
+  assert.equal(remembered.structuredContent.recentWorkspaces[0].root,root.replace(/\/$/,''));
+  assert.deepEqual((await client.callTool({name:'markatlas_settings_read',arguments:{}})).structuredContent.recentWorkspaces,remembered.structuredContent.recentWorkspaces);
   const prompt=await client.callTool({name:'markatlas_clear_recently_opened',arguments:{}});
   assert.equal(prompt.structuredContent.status,'confirmation_required');
   assert.equal((await client.callTool({name:'markatlas_settings_read',arguments:{}})).structuredContent.recentHistoryRevision,'');
@@ -105,6 +110,7 @@ try {
   const cleared=await client.callTool({name:'markatlas_confirm_clear_recently_opened',arguments:{confirmed:true}});
   assert.ok(cleared.structuredContent.recentHistoryRevision);
   const afterClear=await client.callTool({name:'markatlas_settings_read',arguments:{}});
+  assert.deepEqual(afterClear.structuredContent.recentWorkspaces,[]);
   assert.deepEqual(afterClear.structuredContent.values,savedSettings.structuredContent.values);
   assert.equal(afterClear.structuredContent.recentHistoryRevision,cleared.structuredContent.recentHistoryRevision);
   const unsupported=await client.callTool({name:'generate_review_explanation',arguments:{annotation:{id:'test',selectedText:'Hello',sourceName:'a.md',startLine:1,endLine:1,detail:'short'}}});

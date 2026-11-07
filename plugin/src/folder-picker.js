@@ -18,7 +18,7 @@ export function createFolderPicker({platform=process.platform,mode='folder',run=
       operation.focus=output+'.focus';ready();
       // Launch the bundled native helper directly: avoid LaunchServices registration
       // and a new app-instance lookup on every click. AppKit activates its panel.
-      await run(join(bundle,'Contents/MacOS/folder-picker'),[output,...(mode==='file'?['file']:[])],{maxBuffer:8192,timeout:185000});
+      await run(join(bundle,'Contents/MacOS/folder-picker'),[output,...(mode!=='folder'?[mode]:[])],{maxBuffer:8192,timeout:185000});
       const result=JSON.parse(await readFile(output,'utf8'));
       if(result.timedOut===true)throw Error(`The ${mode} chooser timed out. Click the ${mode} button to try again.`);
       if(result.cancelled===true)return null;

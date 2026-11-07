@@ -1,18 +1,32 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
 app.finishLaunching()
-let panel = NSOpenPanel()
-let choosingFile = CommandLine.arguments.count > 2 && CommandLine.arguments[2] == "file"
-panel.title = choosingFile ? "Open file" : "Open folder"
-panel.message = choosingFile ? "Choose a file to review in MarkAtlas." : "Choose a folder to browse in MarkAtlas."
-panel.prompt = "Open"
-panel.canChooseDirectories = !choosingFile
-panel.canChooseFiles = choosingFile
-panel.allowsMultipleSelection = false
-panel.canCreateDirectories = false
+let mode = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "folder"
+let panel: NSSavePanel
+if mode == "save" {
+    let savePanel = NSSavePanel()
+    savePanel.title = "Save comments"
+    savePanel.message = "Choose where to save your complete comments as JSON."
+    savePanel.nameFieldStringValue = "comments.json"
+    savePanel.allowedContentTypes = [.json]
+    savePanel.canCreateDirectories = true
+    panel = savePanel
+} else {
+    let openPanel = NSOpenPanel()
+    let choosingFile = mode == "file"
+    openPanel.title = choosingFile ? "Open file" : "Open folder"
+    openPanel.message = choosingFile ? "Choose a file to review in MarkAtlas." : "Choose a folder to browse in MarkAtlas."
+    openPanel.prompt = "Open"
+    openPanel.canChooseDirectories = !choosingFile
+    openPanel.canChooseFiles = choosingFile
+    openPanel.allowsMultipleSelection = false
+    openPanel.canCreateDirectories = false
+    panel = openPanel
+}
 let pointer = NSEvent.mouseLocation
 let chooserScreen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }) ?? NSScreen.main
 func centerChooser() {

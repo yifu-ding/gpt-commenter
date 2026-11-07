@@ -19,3 +19,6 @@ console.log('Native folder selection, cancellation, refocusing, shared requests,
 
 const filePicker=createFolderPicker({platform:'darwin',mode:'file',run:async(command,args)=>{assert.equal(args.at(-1),'file');await writeFile(args[0],JSON.stringify({path:'/chosen/report.pdf'}));}});
 assert.equal(await filePicker(),'/chosen/report.pdf');
+
+const savePicker=createFolderPicker({platform:'darwin',mode:'save',run:async(command,args)=>{assert.equal(args[1],'save');await writeFile(args[0],JSON.stringify({path:'/chosen/comments.txt'}));}});
+assert.equal(await savePicker(),'/chosen/comments.txt');

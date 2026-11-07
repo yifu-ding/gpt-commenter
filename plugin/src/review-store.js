@@ -13,6 +13,18 @@ export function reviewStore(base=process.env.PLUGIN_DATA || join(tmpdir(),'gpt-c
   async function put(name,data,directory=dir){await mkdir(directory,{recursive:true,mode:0o700});const target=join(directory,name),temp=`${target}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(data),{mode:0o600});await rename(temp,target);}
   async function document(id){const pointer=JSON.parse(await readFile(join(dir,`${valid(id)}.json`),'utf8'));return JSON.parse(await readFile(join(pointer.directory || dir,`${pointer.documentId}.document.json`),'utf8'));}
   return {
+    async lastComments(root,data){
+      const directory=root?await projectDir(root):dir;
+      if(data!==undefined){
+        const record={...JSON.parse(data),id:randomUUID(),savedAt:new Date().toISOString()};
+        // Keep every send attempt until explicit cache cleanup, including failed deliveries.
+        await put(`comments-${record.id}.json`,record,directory);
+        await put('last-comments.json',record,directory);
+      }
+      try{return await readFile(join(directory,'last-comments.json'));}
+      catch(error){if(error.code==='ENOENT')return null;throw error;}
+    },
+    async projectJson(root){const directory=await projectDir(root);await projectWrites.get(directory);return readFile(join(directory,'project.json'));},
     async renamed(root,from,to){
       const directory=await projectDir(root);await projectWrites.get(directory);
       const {rewrite,identity}=renamePaths(root,from,to);

@@ -150,7 +150,7 @@ const removedNotesKey='markatlas:removed-annotations:v1';
 let removedNoteIds=new Set();
 try{removedNoteIds=new Set(JSON.parse(localStorage.getItem(removedNotesKey) || '[]'));}catch{}
 const batchKey='markatlas:review-batch:v1';
-let batchEntries=new Map(),batchSending=false,composerUnavailable=false;
+let batchEntries=new Map(),batchSending=false,batchExporting=false,composerUnavailable=false;
 try{batchEntries=new Map(JSON.parse(localStorage.getItem(batchKey) || '[]').filter(([id])=>!removedNoteIds.has(id)));}catch{}
 let projectDrafts={},dirtyIdentities=new Set(),projectSaveTimer=null,projectSaveQueue=Promise.resolve();
 function saveProjectState(){clearTimeout(projectSaveTimer);projectSaveTimer=setTimeout(()=>flushProjectState().catch(error=>updateStatus(`Cannot save project notes: ${error.message}`)),200);}
@@ -198,16 +198,36 @@ function updateBatchDraft(){
   }
   saveBatchQueue();renderBatch();
 }
+const snapshotStates=new Map();
+function commentsRoot(){return normalizedRoot(fileName && !sourcePath?null:project?.rootPath);}
+function snapshotArgs(){const root=commentsRoot();return root && !project?.singleFile?{root}:{};}
+function snapshotScope(){return snapshotArgs().root || '';}
+function lastCommentsState(){
+ const scope=snapshotScope();
+ if(!snapshotStates.has(scope)){
+  const pending={};snapshotStates.set(scope,pending);
+  serverData('review_comments_snapshot',snapshotArgs()).then(state=>{if(snapshotStates.get(scope)===pending){snapshotStates.set(scope,state);renderBatch();}}).catch(()=>{});
+ }
+ return snapshotStates.get(scope);
+}
+function snapshotUnread(state){try{return state?.available && localStorage.getItem('markatlas:downloaded-comments:'+snapshotScope())!==state.id;}catch{return !!state?.available;}}
+function closeDownloadMenu(){ $('review-download-menu').hidden=true;$('review-download').setAttribute('aria-expanded','false'); }
 let noteFilter=null;
 for(const [id,value] of [['filter-comments','comment'],['filter-explanations','explanation']])$(id).addEventListener('click',()=>{noteFilter=noteFilter===value?null:value;renderBatch();});
 function renderBatch(){
+  const last=lastCommentsState();
   const all=currentBatchEntries(),comments=all.filter(entry=>entry.item.kind==='comment'),entries=all.filter(entry=>!noteFilter || entry.item.kind===noteFilter).sort((a,b)=>(a.path||a.item.sourceName||'').localeCompare(b.path||b.item.sourceName||'') || (a.item.startOffset||0)-(b.item.startOffset||0));
   $('filter-comments').setAttribute('aria-pressed',String(noteFilter==='comment'));$('filter-explanations').setAttribute('aria-pressed',String(noteFilter==='explanation'));$('comments-empty').textContent=all.length?'No notes match this filter.':'No notes yet. Select text to comment or explain.';
-  $('review-batch').hidden=!document.body.classList.contains('comments-open') && (!commenting || !all.length);$('comments-empty').hidden=!!entries.length;
+  $('review-batch').hidden=!document.body.classList.contains('comments-open') && (!commenting || !all.length) && !last?.available;$('comments-empty').hidden=!!entries.length;
   const fileCount=new Set(entries.map(entry=>JSON.stringify([entry.root || entry.item.pdf?.root || '',entry.path || entry.item.sourcePath || entry.item.sourceName]))).size;
   $('review-count').textContent=`${fileCount} ${fileCount===1?'File':'Files'}, ${entries.length} ${entries.length===1?'Annotation':'Annotations'}`;
   $('review-cancel-all').disabled=batchSending || !comments.length;
   $('review-send').disabled=batchSending || !comments.length;$('review-send').textContent=batchSending?'Sending…':'Send';
+  $('review-download').disabled=batchExporting || (!comments.length && !last?.available);
+  $('review-download').classList.toggle('has-new',snapshotUnread(last));
+  $('download-last-comments').disabled=batchExporting || !last?.available;
+  $('download-current-comments').disabled=batchExporting || batchSending || !comments.length;
+  $('review-download').setAttribute('aria-busy',String(batchExporting));
   $('review-send-new').hidden=!composerUnavailable;
   $('review-send-new').disabled=batchSending || !comments.length;
   const list=$('review-list');list.replaceChildren();
@@ -279,6 +299,12 @@ async function sendQueuedReview(target='active'){
     const obsolete=entries.filter(entry=>!validIds.has(entry.item.id));
     if(obsolete.length)removeReviewNotes(obsolete.map(entry=>entry.item.id));
     if(!prepared.length){updateStatus('Obsolete comments removed. No comments remain to send.');return;}
+    // Persist full entries (including screenshots and original selections) before dispatch.
+    // A delivery failure must leave both the queue and this recovery copy available.
+    const scope=snapshotScope();
+    const snapshot=await serverData('review_comments_snapshot',{...snapshotArgs(),data:JSON.stringify({entries:prepared.map(entry=>[entry.item.id,entry]),drafts:projectDrafts,previewChanges})});
+    snapshotStates.set(scope,snapshot);
+    renderBatch();
     await sendReviewBatch(extensions,prepared,target,project?.rootPath,{previewChanges});
     composerUnavailable=false;
     removeReviewNotes(entries.map(entry=>entry.item.id));updateStatus(target==='new'?'Review sent with separate attachments to a new chat.':'Review sent with separate attachments to the current conversation.');
@@ -288,6 +314,41 @@ async function sendQueuedReview(target='active'){
 const patchReview=createPatchReview({document,call:serverData,onSelection:offerSelection,onClose:()=>close(),onViewChange:()=>updateLayout(),getWrapLines:()=>wrapLines,send:async message=>{if(!extensions.message)throw Error('No chat input is available.');const result=await extensions.message.send(message);if(result?.isError)throw Error('Could not send patch comments.');return result;},beforeOpen:async()=>{if(!await canLeaveFile())return false;close();hideSelectionAction();return true;},onApplied:async()=>{const path=activeProjectPath;if(path){activeProjectPath=null;await openProjectFile(path);}}});
 try{$('preview-changes').setAttribute('aria-pressed',String(localStorage.getItem('markatlas:preview-changes')==='true'));}catch{}
 $('preview-changes').addEventListener('click',()=>{const active=$('preview-changes').getAttribute('aria-pressed')!=='true';$('preview-changes').setAttribute('aria-pressed',String(active));try{localStorage.setItem('markatlas:preview-changes',String(active));}catch{}});
+$('review-download').addEventListener('click',()=>{
+ const open=$('review-download-menu').hidden;
+ $('review-download-menu').hidden=!open;$('review-download').setAttribute('aria-expanded',String(open));
+ if(open) [...$('review-download-menu').querySelectorAll('button')].find(button=>!button.disabled)?.focus();
+});
+document.addEventListener('pointerdown',event=>{if(!event.target.closest?.('#review-download-menu, #review-download'))closeDownloadMenu();});
+$('review-download-menu').addEventListener('keydown',event=>{
+ if(event.key==='Escape'){closeDownloadMenu();$('review-download').focus();event.preventDefault();}
+ if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
+  const buttons=[...$('review-download-menu').querySelectorAll('button')].filter(button=>!button.disabled),index=buttons.indexOf(document.activeElement);
+  const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;
+  buttons[next]?.focus();event.preventDefault();
+ }
+});
+async function downloadComments(version){
+ if(batchExporting || (version==='current' && batchSending))return;
+ closeDownloadMenu();batchExporting=true;$('review-error').textContent='';renderBatch();
+ const scope=snapshotScope(),last=snapshotStates.get(scope);
+ try{
+  let args;
+  if(version==='last')args={...snapshotArgs(),version};
+  else {
+    updateBatchDraft();
+    const root=commentsRoot();
+    const saved=root && !project?.singleFile?await flushProjectState():false;
+    args=saved?{root:project.rootPath}:{data:JSON.stringify(currentBatchEntries().map(entry=>[entry.item.id,entry]))};
+  }
+  const result=await serverData('export_review_comments',args);
+  if(version==='last' && result?.saved && last?.id){try{localStorage.setItem('markatlas:downloaded-comments:'+scope,last.id);}catch{}}
+ }
+ catch(error){$('review-error').textContent=error.message;}
+ finally{batchExporting=false;renderBatch();}
+}
+$('download-last-comments').addEventListener('click',()=>downloadComments('last'));
+$('download-current-comments').addEventListener('click',()=>downloadComments('current'));
 $('review-send').addEventListener('click',()=>sendQueuedReview());
 $('review-send-new').addEventListener('click',()=>sendQueuedReview('new'));
 renderBatch();
@@ -567,6 +628,10 @@ function open(selection,item = null,anchor = null) {
   const draft=sameSelection(pending,selection)?commentDraft:'';
   selectionAnchor = anchor;
   pending = Object.fromEntries(['startOffset','endOffset','startLine','endLine','selectedText','mappingStatus','pdf','word','html','patch'].map(key => [key,selection[key]]));
+  if(!selection.pdf && !selection.word && !selection.patch) {
+    pending.startColumn=selection.startOffset-source.slice(0,selection.startOffset).lastIndexOf('\n');
+    pending.endColumn=selection.endOffset-source.slice(0,selection.endOffset).lastIndexOf('\n');
+  }
   if(pdfDocument)pdfViewer.show(pdfDocument,[...items,...(!item?[{...pending,id:'pending-selection',temporary:true}]:[])]);
   if(selection.patch)patchExplanation=null;
   editingId = item?.id || null;
@@ -1518,7 +1583,21 @@ function renderRecentRoots(){
   }catch(error){$('project-status').hidden=false;$('project-status').textContent=error.message;}});node.append(button);
  }
 }
-function rememberRoot(root){if(root){try{recentRoots=rememberRecent(localStorage,root);}catch{}renderRecentRoots();}}
+let recentHistoryGeneration=0;
+function applyRecentWorkspaces(entries){
+ if(!Array.isArray(entries))return;
+ recentRoots=readRecentHistory({getItem:key=>key===recentHistoryKey?JSON.stringify(entries):null});
+ try{localStorage.setItem(recentHistoryKey,JSON.stringify(recentRoots));localStorage.removeItem(recentRootsKey);}catch{}
+ renderRecentRoots();
+}
+async function rememberRoot(root){
+ if(!root)return;
+ const generation=++recentHistoryGeneration;
+ try{recentRoots=rememberRecent(localStorage,root);}catch{}
+ renderRecentRoots();
+ try{const result=await serverData('remember_review_workspace',{root});if(generation===recentHistoryGeneration)applyRecentWorkspaces(result.recentWorkspaces);}
+ catch(error){if(!/Unknown tool|not found|unsupported/i.test(error.message))updateStatus(`Cannot save workspace history: ${error.message}`);}
+}
 renderRecentRoots();
 let workspaceRequest=0;
 function clearWorkspaceDocument() {
@@ -1533,7 +1612,7 @@ async function acceptWorkspace(tree,{selectDefault=false,allowDefault=true,recor
   if(changed){selectedCreationFolder=null;treeAutoExpand=true;await flushProjectState();dirtyIdentities.clear();projectDrafts={};linkedPdf=null;currentEtag=null;clearWorkspaceDocument();breadcrumbFolder=null;$('project-filter').value='';$('project-tree').replaceChildren();}
   if(project && !changed)Object.assign(project,tree);else project=tree;
   if((initial || changed) && !tree.singleFile){try{const saved=await serverData('review_project_state',{root:tree.rootPath});for(const id of saved.removedIds || []){removedNoteIds.add(id);batchEntries.delete(id);}projectDrafts=saved.drafts || {};for(const [key,draft] of Object.entries(projectDrafts)){const prefix='project:'+tree.rootPath.replace(/\/+$/,'')+'/';if(!key.startsWith(prefix))continue;for(const item of draft.items || [])if(item.kind==='explanation' && !removedNoteIds.has(item.id))batchEntries.set(item.id,{identity:key,root:tree.rootPath,path:key.slice(prefix.length),item});}for(const [id,entry] of saved.entries || [])if(entryRoot(entry)===normalizedRoot(tree.rootPath))batchEntries.set(id,entry);}catch(error){updateStatus(`Cannot load project notes: ${error.message}`);}}
-  if(recordRecent && !tree.singleFile && (initial || changed || selectDefault))rememberRoot(tree.rootPath);
+  if(recordRecent && !tree.singleFile && (initial || changed || selectDefault))await rememberRoot(tree.rootPath);
   $('project-status').hidden=true;$('project-status').textContent='';
   renderBreadcrumb();renderProjectTree();renderBatch();
   // Only choose a default when connecting a folder, never on focus/tree refresh.
@@ -1629,6 +1708,7 @@ function applyHostContext(context) {
 }
 async function refreshViewerSettings(){
  if(settingsRequest)return settingsRequest;
+ const historyGeneration=recentHistoryGeneration;
  settingsRequest=(async()=>{try{
   const result=await serverData('markatlas_settings_read');if(!result?.values)return;
   const values=result.preferences || result.values;
@@ -1636,7 +1716,8 @@ async function refreshViewerSettings(){
   if(['left','right'].includes(values.outlinePosition) && (!lastSettings || values.outlinePosition!==lastSettings.outlinePosition))outlineSide=values.outlinePosition;
   viewerPreferences={themeColor:values.themeColor || 'host',showGitChanges:values.showGitChanges!==false};
   const changed=JSON.stringify(lastSettings)!==JSON.stringify(values);lastSettings={...values};
-  if(syncRecentHistory(localStorage,result.recentHistoryRevision)){recentRoots=[];renderRecentRoots();}
+  try{if(syncRecentHistory(localStorage,result.recentHistoryRevision)){recentRoots=[];renderRecentRoots();}}catch{}
+  if(historyGeneration===recentHistoryGeneration)applyRecentWorkspaces(result.recentWorkspaces);
   if(changed){applyHostContext(app.getHostContext());renderProjectTree();updateLayout();codeEditor.measure();positionComposer();}
  }catch(error){console.warn('MarkAtlas settings unavailable:',error.message);}finally{settingsRequest=null;}})();return settingsRequest;
 }
@@ -1648,7 +1729,7 @@ window.addEventListener('pagehide',()=>clearInterval(settingsPoll));
 app.onhostcontextchanged = context=>{applyHostContext(context);loadWorkspace();};
 createTreeToolbar(treeToolButtons);
 setProjectOpen(true);
-app.connect().then(async()=>{await refreshViewerSettings();applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
+app.connect().then(async()=>{snapshotStates.clear();renderBatch();await refreshViewerSettings();applyHostContext(app.getHostContext());if(paneConfig){await openPaneFile(paneConfig.root,paneConfig.path);setProjectOpen(false);await paneBridge.call('ready');}else await loadWorkspace();}).catch(error=>{$('status').textContent = `Host connection unavailable: ${error.message}. You can still open a local file.`;});
 
 // Capture before editor and host bubbling shortcuts. Each pane handles its own focus.
 window.addEventListener('keydown',event=>{

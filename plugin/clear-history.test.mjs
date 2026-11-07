@@ -15,7 +15,12 @@ try{
  const store=explanationSettings(base);assert.deepEqual(await store.read(),{...defaults,explanationModel:'gpt-6-astra'});
  await store.update({showGitChanges:false,themeColor:'teal'});assert.equal((await explanationSettings(base).read()).showGitChanges,false);
  await assert.rejects(store.update({showGitChanges:'false'}));await assert.rejects(store.update({themeColor:'unknown'}));
+ await store.rememberWorkspace('/older');await store.rememberWorkspace('/latest');
+ assert.deepEqual((await explanationSettings(base).recentWorkspaces()).map(entry=>entry.root),['/latest','/older'],'new server instance reads saved history');
+ await store.rememberWorkspace('/older');assert.deepEqual((await store.recentWorkspaces()).map(entry=>entry.root),['/older','/latest']);
  const before=await store.read();const revision=await store.clearRecentHistory();assert.ok(revision);assert.deepEqual(await store.read(),before);assert.equal(await explanationSettings(base).historyRevision(),revision);
+ assert.deepEqual(await explanationSettings(base).recentWorkspaces(),[],'clearing invalidates persisted history too');
+ await store.rememberWorkspace('/after-clear');assert.deepEqual((await explanationSettings(base).recentWorkspaces()).map(entry=>entry.root),['/after-clear']);
 }finally{await rm(base,{recursive:true,force:true});}
 const source=readFileSync(new URL('./src/clear-history.js',import.meta.url),'utf8').replace("import {App} from '@modelcontextprotocol/ext-apps';",`class App {async connect(){} async callServerTool(args){window.calls.push(args);return {};}}`);
 const bundle=await build({stdin:{contents:source,resolveDir:new URL('./src',import.meta.url).pathname},bundle:true,format:'iife',write:false});
