@@ -36,6 +36,8 @@ select($('document').querySelectorAll('p')[0].firstChild,0,5);$('message').value
 select($('document').querySelectorAll('p')[1].firstChild,0,5);$('message').value='Review gamma';enter();await flush();await flush();
 assert.equal(window.chatCalls.length,beforeBatchCalls);assert.equal($('review-count').textContent,'1 File, 2 Annotations');
 assert.equal($('review-send').nextElementSibling.id,'review-download');
+assert.equal($('review-download-menu').parentElement,$('review-download').parentElement,'download menu anchors to the action bar in both floating and sidebar layouts');
+assert.equal(window.getComputedStyle($('review-download').parentElement).position,'relative');
 let finishExport;window.exportGate=new Promise(resolve=>{finishExport=resolve;});
 $('review-download').click();$('download-current-comments').click();$('review-download').click();$('download-current-comments').click();await until(()=>window.exportArgs);
 const exported=JSON.parse(window.exportArgs.data);
